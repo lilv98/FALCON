@@ -18,9 +18,11 @@
 ## Run
 - Family Ontology
     > `cd ./code/model`
+
     > `python family.py`
 - Pizza Ontology
     > `cd ./code/run`
+    
     > `sh run_pizza.sh`
 - Human Phenotype Ontology
     > `cd ./data/HPO/ && unzip BIOGRID-ALL-4.4.211.tab.zip && cd ../../code/run`
