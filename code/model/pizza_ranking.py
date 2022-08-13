@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import random
 import re
+import tqdm
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import precision_recall_curve
@@ -361,17 +362,27 @@ def concept_replacer(axiom, all_concepts):
     else:
         raise ValueError
 
-def tbox_test_neg_generator(tbox_test_pos, all_concepts):
+def tbox_test_neg_generator(tbox_test_pos, c_dict):
     ret = []
     for axiom in tbox_test_pos:
         matched = re.match(r'ObjectIntersectionOf\((.*) ObjectComplementOf\((.*?)\)\)', axiom, re.M|re.I)
         if len(matched.groups()) == 2:
-            ret_inner = []
-            for concept in all_concepts:
-                ret_inner.append(axiom.replace(matched.groups()[0], concept))
-                ret_inner.append(axiom.replace(matched.groups()[1], concept))
-        ret.append(ret_inner)     
-    return ret
+            ret_left = []
+            ret_right = []
+            for _, concept in enumerate(c_dict):
+                ret_left.append(axiom.replace(matched.groups()[0], concept))
+                ret_right.append(axiom.replace(matched.groups()[1], concept))
+        ret.append([ret_left, ret_right])
+        
+    label = []
+    for axiom_group_id in range(len(ret)):
+        label_line = []
+        for i in range(2):
+            for axiom_id in range(len(ret[axiom_group_id][i])):
+                if ret[axiom_group_id][i][axiom_id] == tbox_test_pos[axiom_group_id]:
+                    label_line.append(axiom_id)
+        label.append(label_line)
+    return ret, label
 
 def get_data(cfg):
     moreAxioms = [
@@ -422,23 +433,21 @@ def get_data(cfg):
         all_entities.add(axiom.split(' ')[-1])
     e_dict = {k: v for v, k in enumerate(all_entities)}
     
-    tbox_test_neg = tbox_test_neg_generator(tbox_test_pos, all_concepts)
+    tbox_test_neg, label = tbox_test_neg_generator(tbox_test_pos, c_dict)
     
-    return tbox_train, tbox_test_pos, tbox_test_neg, abox_ec, abox_ee, c_dict, e_dict, r_dict
+    return tbox_train, tbox_test_pos, tbox_test_neg, label, abox_ec, abox_ee, c_dict, e_dict, r_dict
 
-def compute_metrics(preds):
-    n_pos = n_neg = len(preds) // 2
-    labels = [0] * n_pos + [1] * n_neg
-    
-    mae_pos = round(sum(preds[:n_pos]) / n_pos, 4)
-    auc = round(roc_auc_score(labels, preds), 4)
-    aupr = round(average_precision_score(labels, preds), 4)
-    
-    precision, recall, _ = precision_recall_curve(labels, preds)
-    f1_scores = 2 * recall * precision / (recall + precision + 1e-10)
-    fmax = round(np.max(f1_scores), 4)
-    
-    return mae_pos, auc, aupr, fmax
+def compute_metrics(preds, label):
+    preds = torch.tensor(preds)
+    label = torch.tensor(label).unsqueeze(dim=-1)
+    logits_sorted = torch.argsort(preds, dim=-1, descending=True)
+    ranks = ((logits_sorted == label).nonzero()[:, -1] + 1).float()
+    r = ranks.mean().item()
+    rr = (1 / ranks).mean().item()
+    h1 = (ranks == 1).float().mean().item()
+    h3 = (ranks <= 3).float().mean().item()
+    h10 = (ranks <= 10).float().mean().item()
+    return r, rr, h1, h3, h10
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser()
@@ -446,9 +455,9 @@ def parse_args(args=None):
     parser.add_argument('--lr', default=0.005, type=float)
     parser.add_argument('--wd', default=0, type=float)
     parser.add_argument('--emb_dim', default=50, type=int)
-    parser.add_argument('--n_models', default=5, type=int)
+    parser.add_argument('--n_models', default=20, type=int)
     parser.add_argument('--bs', default=256, type=int)
-    parser.add_argument('--anon_e', default=0, type=int)
+    parser.add_argument('--anon_e', default=4, type=int)
     parser.add_argument('--n_inconsistent', default=0, type=int)
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz, or NN')
     parser.add_argument('--residuum', default='notCorD', type=str)
@@ -456,7 +465,7 @@ def parse_args(args=None):
     # Untunable
     parser.add_argument('--data_root', default='../../data/Pizza/', type=str)
     parser.add_argument('--max_steps', default=10000, type=int)
-    parser.add_argument('--valid_interval', default=10, type=int)
+    parser.add_argument('--valid_interval', default=100, type=int)
     parser.add_argument('--tolerance', default=10, type=int)
     return parser.parse_args(args)
 
@@ -465,7 +474,7 @@ if __name__ == '__main__':
     print('Configurations:')
     for arg in vars(cfg):
         print(f'\t{arg}: {getattr(cfg, arg)}', flush=True)
-    tbox_train, tbox_test_pos, tbox_test_neg, abox_ec, abox_ee, c_dict, e_dict, r_dict = get_data(cfg)
+    tbox_train, tbox_test_pos, tbox_test_neg, label, abox_ec, abox_ee, c_dict, e_dict, r_dict = get_data(cfg)
     print(f'TBox train:{len(tbox_train)}, TBox test pos:{len(tbox_test_pos)}, TBox test neg:{len(tbox_test_neg)}')
     
     save_root = f'../tmp/lr_{cfg.lr}_wd_{cfg.wd}_emb_dim_{cfg.emb_dim}_n_models_{cfg.n_models}_bs_{cfg.bs}_anon_e_{cfg.anon_e}_n_inconsistent_{cfg.n_inconsistent}_t_norm_{cfg.t_norm}_residuum_{cfg.residuum}_max_measure_{cfg.max_measure}/'
@@ -473,7 +482,8 @@ if __name__ == '__main__':
         os.makedirs(save_root)
         
     logits = []
-    mae_poss, aucs, auprs, fmaxs = 0, 0, 0, 0
+    # mae_poss, aucs, auprs, fmaxs = 0, 0, 0, 0
+    mrrs = 0
     for i in range(cfg.n_models):
         print(f'Model {i+1}', flush=True)
         model = FALCON(c_dict=c_dict, 
@@ -512,15 +522,22 @@ if __name__ == '__main__':
                 model.eval()
                 preds = []
                 with torch.no_grad():
-                    for axiom in tbox_test_pos:
-                        fs = model.forward(axiom, anon_e_emb)
-                        preds.append(max(fs).item())
-                    for axiom in tbox_test_neg:
-                        fs = model.forward(axiom, anon_e_emb)
-                        preds.append(max(fs).item())
-                mae_pos, auc, aupr, fmax = compute_metrics(preds)
-                # print(f'MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}')
-                early_stop_value = auc
+                    # for axiom in tbox_test_pos:
+                    #     fs = model.forward(axiom, anon_e_emb)
+                    #     preds.append(max(fs).item())
+                    for axiom_group in tbox_test_neg:
+                        preds_left = []
+                        preds_right = []
+                        for axiom in axiom_group[0]:
+                            fs = model.forward(axiom, anon_e_emb)
+                            preds_left.append(max(fs).item())
+                        for axiom in axiom_group[1]:
+                            fs = model.forward(axiom, anon_e_emb)
+                            preds_right.append(max(fs).item())
+                        preds.append([preds_left, preds_right])
+                r, rr, h1, h3, h10 = compute_metrics(preds, label)
+                print(f'MRR:{rr}')
+                early_stop_value = rr
                 if early_stop_value >= best_value:
                     best_value = early_stop_value
                     tolerance = cfg.tolerance
@@ -534,25 +551,40 @@ if __name__ == '__main__':
         model.load_state_dict(torch.load(save_root + str(step - cfg.tolerance * cfg.valid_interval + 1)))
         with torch.no_grad():
             model.eval()
-            for axiom in tbox_test_pos:
-                fs = model.forward(axiom, anon_e_emb)
-                logits_each_model.append(max(fs).item())
-            for axiom in tbox_test_neg:
-                fs = model.forward(axiom, anon_e_emb)
-                logits_each_model.append(max(fs).item())
+            # for axiom in tbox_test_pos:
+            #     fs = model.forward(axiom, anon_e_emb)
+            #     logits_each_model.append(max(fs).item())
+            # for axiom in tbox_test_neg:
+            #     fs = model.forward(axiom, anon_e_emb)
+            #     logits_each_model.append(max(fs).item())
+            for axiom_group in tqdm.tqdm(tbox_test_neg):
+                preds_left = []
+                preds_right = []
+                for axiom in axiom_group[0]:
+                    fs = model.forward(axiom, anon_e_emb)
+                    preds_left.append(max(fs).item())
+                for axiom in axiom_group[1]:
+                    fs = model.forward(axiom, anon_e_emb)
+                    preds_right.append(max(fs).item())
+                logits_each_model.append([preds_left, preds_right])
         logits.append(logits_each_model)
 
-        mae_pos, auc, aupr, fmax = compute_metrics(logits_each_model)
-        mae_poss += mae_pos
-        aucs += auc
-        auprs += aupr
-        fmaxs += fmax
-        mae_pos = round(mae_poss/(i + 1), 4)
-        auc = round(aucs/(i + 1), 4)
-        aupr = round(auprs/(i + 1), 4)
-        fmax = round(fmaxs/(i + 1), 4)
-        print(f'AVG: MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}', flush=True)    
+        r, rr, h1, h3, h10 = compute_metrics(logits_each_model, label)
+        # mae_poss += mae_pos
+        # aucs += auc
+        # auprs += aupr
+        # fmaxs += fmax
+        mrrs += rr
+        # mae_pos = round(mae_poss/(i + 1), 4)
+        # auc = round(aucs/(i + 1), 4)
+        # aupr = round(auprs/(i + 1), 4)
+        # fmax = round(fmaxs/(i + 1), 4)
+        mrr = round(mrrs/(i + 1), 4)
+        # print(f'AVG: MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}', flush=True)  
+        print(f'AVG: MRR:{mrr}', flush=True)     
 
         preds = torch.tensor(logits).max(dim=0)[0].numpy().tolist()
-        mae_pos, auc, aupr, fmax = compute_metrics(preds)
-        print(f'MAX: MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}', flush=True)    
+        # mae_pos, auc, aupr, fmax = compute_metrics(preds)
+        r, rr, h1, h3, h10 = compute_metrics(preds, label)
+        # print(f'MAX: MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}', flush=True)    
+        print(f'MAX: MRR:{round(rr, 4)}', flush=True)    
