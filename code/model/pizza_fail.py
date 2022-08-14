@@ -1,4 +1,3 @@
-from turtle import right
 import torch
 import pdb
 import argparse
@@ -6,8 +5,6 @@ import os
 import pandas as pd
 import numpy as np
 import random
-import re
-import tqdm
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import precision_recall_curve
@@ -363,36 +360,15 @@ def concept_replacer(axiom, all_concepts):
     else:
         raise ValueError
 
-def tbox_test_neg_generator(tbox, tbox_test_pos, c_dict):
+def tbox_test_neg_generator(tbox, all_concepts, k):
     ret = []
-    for axiom in tbox_test_pos:
-        matched = re.match(r'ObjectIntersectionOf\((.*) ObjectComplementOf\((.*?)\)\)', axiom, re.M|re.I)
-        if len(matched.groups()) == 2:
-            # ret_left = [axiom]
-            # ret_right = [axiom]
-            ret_left = []
-            ret_right = []
-            for _, concept in enumerate(c_dict):
-                left = axiom.replace(matched.groups()[0], concept)
-                right = axiom.replace(matched.groups()[1], concept)
-                # if left not in tbox and left not in tbox_test_pos:
-                if left not in tbox:
-                    ret_left.append(left)
-                # if right not in tbox and right not in tbox_test_pos:
-                if right not in tbox:
-                    ret_right.append(right)
-        ret.append([ret_left, ret_right])
-        
-    label = []
-    for axiom_group_id in range(len(ret)):
-        label_line = []
-        for i in range(2):
-            for axiom_id in range(len(ret[axiom_group_id][i])):
-                if ret[axiom_group_id][i][axiom_id] == tbox_test_pos[axiom_group_id]:
-                    label_line.append(axiom_id)
-        label.append(label_line)
-    
-    return ret, label
+    for _ in range(k):
+        axiom_pos = random.choice(tbox)
+        axiom_neg = concept_replacer(axiom_pos, all_concepts)
+        while axiom_neg in tbox:
+            axiom_neg = concept_replacer(axiom_pos, all_concepts)
+        ret.append(axiom_neg)
+    return ret
 
 def get_data(cfg):
     moreAxioms = [
@@ -400,16 +376,63 @@ def get_data(cfg):
         'ObjectIntersectionOf(<MysteriousPizza_1> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#NonVegetarianPizza> <http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianPizza>)))',
         'ObjectIntersectionOf(<MysteriousPizza_2> ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>)))',
         'ObjectIntersectionOf(<MysteriousPizza_3> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> <http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>)))',
-        
         'ObjectIntersectionOf(<MysteriousTopping_0> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> <http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping>)))',
         'ObjectIntersectionOf(<MysteriousTopping_1> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> <http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetableTopping>)))',
         'ObjectIntersectionOf(<MysteriousTopping_2> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#SeafoodTopping> <http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping>)))',
-        'ObjectIntersectionOf(<MysteriousTopping_3> ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>)))',
-        
+        'ObjectIntersectionOf(<MysteriousTopping_3> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
         'ObjectIntersectionOf(<MysteriousBase_0> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> <http://www.co-ode.org/ontologies/pizza/pizza.owl#ThinAndCrispyBase>)))',
-        'ObjectIntersectionOf(<MysteriousBase_1> ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>)))',
+        'ObjectIntersectionOf(<MysteriousBase_1> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
     ]
-    moreAxioms = moreAxioms[:cfg.n_inconsistent]
+    
+    moreAxioms = moreAxioms*10
     tbox_train, all_concepts_train, all_relations_train = extract_nodes(cfg, filename='pizzaTBox.txt', moreAxioms=moreAxioms)
     tbox_all, all_concepts_test, all_relations_test = extract_nodes(cfg, filename='pizzaTBoxInferred.txt')
     tbox_test_pos = []
@@ -443,33 +466,43 @@ def get_data(cfg):
         all_entities.add(axiom.split(' ')[-1])
     e_dict = {k: v for v, k in enumerate(all_entities)}
     
-    tbox_test_neg, label = tbox_test_neg_generator(tbox_train, tbox_test_pos, c_dict)
+    try:
+        tbox_test_neg = []
+        with open(cfg.data_root + 'tbox_test_neg.txt') as f:
+            for line in f:
+                tbox_test_neg.append(line.strip('\n'))
+    except:
+        tbox_test_neg = tbox_test_neg_generator(tbox_all, list(all_concepts), k=len(tbox_test_pos))
+        with open(cfg.data_root + 'tbox_test_neg.txt', 'w') as f:
+            for axiom in tbox_test_neg:
+                f.write("%s\n" % axiom)
     
-    return tbox_train, tbox_test_pos, tbox_test_neg, label, abox_ec, abox_ee, c_dict, e_dict, r_dict
+    return tbox_train, tbox_test_pos, tbox_test_neg, abox_ec, abox_ee, c_dict, e_dict, r_dict
 
-def compute_metrics(preds, labels):
-    ranks = []
-    for preds_group_id in range(len(preds)):
-        for i in range(2):
-            pred = torch.tensor(preds[preds_group_id][i])
-            pred_sorted = torch.argsort(pred, dim=-1, descending=False)
-            label = torch.tensor(labels[preds_group_id][i]).unsqueeze(dim=-1)
-            rank = ((pred_sorted == label).nonzero()[0][0] + 1).float()
-            ranks.append(rank)
-    ranks = torch.tensor(ranks)
-    rr = (1 / ranks).mean().item()
-    return rr
+def compute_metrics(preds):
+    n_pos = n_neg = len(preds) // 2
+    labels = [0] * n_pos + [1] * n_neg
+    
+    mae_pos = round(sum(preds[:n_pos]) / n_pos, 4)
+    auc = round(roc_auc_score(labels, preds), 4)
+    aupr = round(average_precision_score(labels, preds), 4)
+    
+    precision, recall, _ = precision_recall_curve(labels, preds)
+    f1_scores = 2 * recall * precision / (recall + precision + 1e-10)
+    fmax = round(np.max(f1_scores), 4)
+    
+    return mae_pos, auc, aupr, fmax
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser()
     # Tuable
-    parser.add_argument('--lr', default=0.001, type=float)
-    parser.add_argument('--wd', default=0.00001, type=float)
+    parser.add_argument('--lr', default=0.005, type=float)
+    parser.add_argument('--wd', default=0, type=float)
     parser.add_argument('--emb_dim', default=50, type=int)
-    parser.add_argument('--n_models', default=50, type=int)
+    parser.add_argument('--n_models', default=20, type=int)
     parser.add_argument('--bs', default=256, type=int)
-    parser.add_argument('--anon_e', default=2, type=int)
-    parser.add_argument('--n_inconsistent', default=0, type=int)
+    parser.add_argument('--anon_e', default=4, type=int)
+    parser.add_argument('--n_inconsistent', default=500, type=int)
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz, or NN')
     parser.add_argument('--residuum', default='notCorD', type=str)
     parser.add_argument('--max_measure', default='max', type=str)
@@ -485,16 +518,15 @@ if __name__ == '__main__':
     print('Configurations:')
     for arg in vars(cfg):
         print(f'\t{arg}: {getattr(cfg, arg)}', flush=True)
-    tbox_train, tbox_test_pos, tbox_test_neg, label, abox_ec, abox_ee, c_dict, e_dict, r_dict = get_data(cfg)
-    print(f'TBox train:{len(tbox_train)}, TBox test pos:{len(tbox_test_pos)}')
+    tbox_train, tbox_test_pos, tbox_test_neg, abox_ec, abox_ee, c_dict, e_dict, r_dict = get_data(cfg)
+    print(f'TBox train:{len(tbox_train)}, TBox test pos:{len(tbox_test_pos)}, TBox test neg:{len(tbox_test_neg)}')
     
     save_root = f'../tmp/lr_{cfg.lr}_wd_{cfg.wd}_emb_dim_{cfg.emb_dim}_n_models_{cfg.n_models}_bs_{cfg.bs}_anon_e_{cfg.anon_e}_n_inconsistent_{cfg.n_inconsistent}_t_norm_{cfg.t_norm}_residuum_{cfg.residuum}_max_measure_{cfg.max_measure}/'
     if not os.path.exists(save_root):
         os.makedirs(save_root)
         
     logits = []
-    # mae_poss, aucs, auprs, fmaxs = 0, 0, 0, 0
-    mrrs = 0
+    mae_poss, aucs, auprs, fmaxs = 0, 0, 0, 0
     for i in range(cfg.n_models):
         print(f'Model {i+1}', flush=True)
         model = FALCON(c_dict=c_dict, 
@@ -503,7 +535,7 @@ if __name__ == '__main__':
                         cfg=cfg)
         optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.wd)
         tolerance = cfg.tolerance
-        best_value = 0
+        best_value = 10000
         for step in range(cfg.max_steps):
             # print(f'Step {step + 1}:')
             model.train()
@@ -533,23 +565,16 @@ if __name__ == '__main__':
                 model.eval()
                 preds = []
                 with torch.no_grad():
-                    # for axiom in tbox_test_pos:
-                    #     fs = model.forward(axiom, anon_e_emb)
-                    #     preds.append(max(fs).item())
-                    for axiom_group in tbox_test_neg:
-                        preds_left = []
-                        preds_right = []
-                        for axiom in axiom_group[0]:
-                            fs = model.forward(axiom, anon_e_emb)
-                            preds_left.append(max(fs).item())
-                        for axiom in axiom_group[1]:
-                            fs = model.forward(axiom, anon_e_emb)
-                            preds_right.append(max(fs).item())
-                        preds.append([preds_left, preds_right])
-                rr = compute_metrics(preds, label)
-                print(f'MRR:{rr}', flush=True)
-                early_stop_value = rr
-                if early_stop_value >= best_value:
+                    for axiom in tbox_test_pos:
+                        fs = model.forward(axiom, anon_e_emb)
+                        preds.append(max(fs).item())
+                    for axiom in tbox_test_neg:
+                        fs = model.forward(axiom, anon_e_emb)
+                        preds.append(max(fs).item())
+                mae_pos, auc, aupr, fmax = compute_metrics(preds)
+                print(f'MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}')
+                early_stop_value = auc
+                if early_stop_value <= best_value:
                     best_value = early_stop_value
                     tolerance = cfg.tolerance
                 else:
@@ -562,52 +587,25 @@ if __name__ == '__main__':
         model.load_state_dict(torch.load(save_root + str(step - cfg.tolerance * cfg.valid_interval + 1)))
         with torch.no_grad():
             model.eval()
-            # for axiom in tbox_test_pos:
-            #     fs = model.forward(axiom, anon_e_emb)
-            #     logits_each_model.append(max(fs).item())
-            # for axiom in tbox_test_neg:
-            #     fs = model.forward(axiom, anon_e_emb)
-            #     logits_each_model.append(max(fs).item())
-            for axiom_group in tbox_test_neg:
-                preds_left = []
-                preds_right = []
-                for axiom in axiom_group[0]:
-                    fs = model.forward(axiom, anon_e_emb)
-                    preds_left.append(max(fs).item())
-                for axiom in axiom_group[1]:
-                    fs = model.forward(axiom, anon_e_emb)
-                    preds_right.append(max(fs).item())
-                logits_each_model.append([preds_left, preds_right])
+            for axiom in tbox_test_pos:
+                fs = model.forward(axiom, anon_e_emb)
+                logits_each_model.append(max(fs).item())
+            for axiom in tbox_test_neg:
+                fs = model.forward(axiom, anon_e_emb)
+                logits_each_model.append(max(fs).item())
         logits.append(logits_each_model)
 
-        rr = compute_metrics(logits_each_model, label)
-        # mae_poss += mae_pos
-        # aucs += auc
-        # auprs += aupr
-        # fmaxs += fmax
-        mrrs += rr
-        # mae_pos = round(mae_poss/(i + 1), 4)
-        # auc = round(aucs/(i + 1), 4)
-        # aupr = round(auprs/(i + 1), 4)
-        # fmax = round(fmaxs/(i + 1), 4)
-        mrr = round(mrrs/(i + 1), 4)
-        # print(f'AVG: MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}', flush=True)  
-        print(f'AVG: MRR:{mrr}', flush=True)     
+        mae_pos, auc, aupr, fmax = compute_metrics(logits_each_model)
+        mae_poss += mae_pos
+        aucs += auc
+        auprs += aupr
+        fmaxs += fmax
+        mae_pos = round(mae_poss/(i + 1), 4)
+        auc = round(aucs/(i + 1), 4)
+        aupr = round(auprs/(i + 1), 4)
+        fmax = round(fmaxs/(i + 1), 4)
+        print(f'AVG: MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}', flush=True)    
 
-        preds = []
-        for sample_id in range(len(logits_each_model)):
-            preds_left = []
-            for model_id in range(len(logits)):
-                preds_left.append(logits[model_id][sample_id][0])
-            preds_left = torch.tensor(preds_left).max(dim=0)[0].numpy().tolist()
-            preds_right = []
-            for model_id in range(len(logits)):
-                preds_right.append(logits[model_id][sample_id][1])
-            preds_right = torch.tensor(preds_right).max(dim=0)[0].numpy().tolist()
-            preds.append([preds_left, preds_right])
-            
-        # preds = torch.tensor(logits).max(dim=0)[0].numpy().tolist()
-        # mae_pos, auc, aupr, fmax = compute_metrics(preds)
-        rr = compute_metrics(preds, label)
-        # print(f'MAX: MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}', flush=True)    
-        print(f'MAX: MRR:{round(rr, 4)}', flush=True)    
+        preds = torch.tensor(logits).max(dim=0)[0].numpy().tolist()
+        mae_pos, auc, aupr, fmax = compute_metrics(preds)
+        print(f'MAX: MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}', flush=True)    
