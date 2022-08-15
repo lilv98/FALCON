@@ -376,16 +376,62 @@ def get_data(cfg):
         'ObjectIntersectionOf(<MysteriousPizza_1> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#NonVegetarianPizza> <http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianPizza>)))',
         'ObjectIntersectionOf(<MysteriousPizza_2> ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>)))',
         'ObjectIntersectionOf(<MysteriousPizza_3> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> <http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>)))',
-        
         'ObjectIntersectionOf(<MysteriousTopping_0> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> <http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping>)))',
         'ObjectIntersectionOf(<MysteriousTopping_1> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> <http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetableTopping>)))',
         'ObjectIntersectionOf(<MysteriousTopping_2> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#SeafoodTopping> <http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping>)))',
-        'ObjectIntersectionOf(<MysteriousTopping_3> ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>)))',
-        
+        'ObjectIntersectionOf(<MysteriousTopping_3> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
         'ObjectIntersectionOf(<MysteriousBase_0> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> <http://www.co-ode.org/ontologies/pizza/pizza.owl#ThinAndCrispyBase>)))',
-        'ObjectIntersectionOf(<MysteriousBase_1> ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>)))',
+        'ObjectIntersectionOf(<MysteriousBase_1> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianTopping> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
+        
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#IceCream>))))',
+        'ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase> ObjectComplementOf(ObjectIntersectionOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza> ObjectComplementOf(<http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatyPizza>))))',
     ]
-    moreAxioms = moreAxioms[:cfg.n_inconsistent]
+    moreAxioms = (moreAxioms * 20)[:cfg.n_inconsistent]
     tbox_train, all_concepts_train, all_relations_train = extract_nodes(cfg, filename='pizzaTBox.txt', moreAxioms=moreAxioms)
     tbox_all, all_concepts_test, all_relations_test = extract_nodes(cfg, filename='pizzaTBoxInferred.txt')
     tbox_test_pos = []
@@ -463,7 +509,7 @@ def parse_args(args=None):
     parser.add_argument('--data_root', default='../../data/Pizza/', type=str)
     parser.add_argument('--max_steps', default=10000, type=int)
     parser.add_argument('--valid_interval', default=10, type=int)
-    parser.add_argument('--tolerance', default=10, type=int)
+    parser.add_argument('--tolerance', default=5, type=int)
     return parser.parse_args(args)
 
 if __name__ == '__main__':

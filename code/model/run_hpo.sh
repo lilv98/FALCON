@@ -15,7 +15,7 @@ do
     do
         for num_ng in 4 8 16
         do
-            python ../model/hpo.py --model FALCON --lr $lr --emb_dim $emb_dim --num_ng $num_ng --verbose 0 --gpu 0
+            python hpo.py --model FALCON --lr $lr --emb_dim $emb_dim --num_ng $num_ng --verbose 0 --gpu 0
         done
     done 
 done

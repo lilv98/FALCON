@@ -1,7 +1,7 @@
 /data/HPO/BIOGRID-ALL-4.4.211.tab.txt
 /code/tmp
 /code/log/*.log
-/code/model/*.log
+# /code/model/*.log
 /code/model/*.err
 /code/model/*.out
 /code/model/dcgm
