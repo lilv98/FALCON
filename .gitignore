@@ -5,6 +5,7 @@
 /code/model/*.err
 /code/model/*.out
 /code/model/dcgm
+/archive
 
 
 # Byte-compiled / optimized / DLL files
