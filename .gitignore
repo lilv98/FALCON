@@ -1,4 +1,6 @@
 /data/HPO/BIOGRID-ALL-4.4.211.tab.txt
+/data/pheno/pheno.owl
+/data/pheno/pheno.txt
 /code/tmp
 /code/log/*.log
 # /code/model/*.log
