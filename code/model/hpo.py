@@ -258,7 +258,7 @@ def get_abox_ec_created(all_concepts, k):
     counter = 0
     for concept in all_concepts:
         if counter < k:
-            ret.append([concept[:-1] + '_1> ', concept])
+            ret.append([concept[:-1] + '_1>', concept])
             counter += 1
     return pd.DataFrame(ret, columns=['h', 't'])
 
