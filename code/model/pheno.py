@@ -256,12 +256,14 @@ def get_data(cfg):
     
     return tbox_name_train, tbox_desc_train, abox_ec, abox_ec_created, abox_ee_train, abox_ee_test, c_dict, e_dict, e_dict_more, r_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict
 
-class GGIDataset(torch.utils.data.Dataset):
-    def __init__(self, cfg, data, e_dict, already_ts_dict, already_hs_dict, stage):
+class EEDataset(torch.utils.data.Dataset):
+    def __init__(self, cfg, data, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage):
         super().__init__()
         self.stage = stage
         self.cfg = cfg
         self.e_dict = e_dict
+        self.all_alleles = all_alleles
+        self.all_omims = all_omims
         self.data = torch.tensor(data.values)
         self.all_candidate = torch.arange(len(e_dict)).unsqueeze(dim=-1)
         self.neg_shape = torch.zeros(self.cfg.num_ng//2, 1)
@@ -272,13 +274,13 @@ class GGIDataset(torch.utils.data.Dataset):
         head, rel, tail = pos
         already_ts = torch.tensor(self.already_ts_dict[(head.item(), rel.item())])
         already_hs = torch.tensor(self.already_hs_dict[(tail.item(), rel.item())])
-        neg_pool_t = torch.ones(len(self.e_dict))
+        neg_pool_t = torch.ones(len(self.all_omims))
         neg_pool_t[already_ts] = 0
         neg_pool_t = neg_pool_t.nonzero()
-        neg_pool_h = torch.ones(len(self.e_dict))
+        neg_pool_h = torch.ones(len(self.all_alleles))
         neg_pool_h[already_hs] = 0
         neg_pool_h = neg_pool_h.nonzero()
-        neg_t = neg_pool_t[torch.randint(len(neg_pool_t), (self.cfg.num_ng//2,))]
+        neg_t = neg_pool_t[torch.randint(len(neg_pool_t), (self.cfg.num_ng//2,))] + len(self.all_alleles)
         neg_h = neg_pool_h[torch.randint(len(neg_pool_h), (self.cfg.num_ng//2,))]
         return neg_t, neg_h
     
@@ -702,20 +704,18 @@ if __name__ == '__main__':
     print(f'TBox Name: {len(tbox_name_train)}\tTBox Description: {len(tbox_desc_train)}\t\
         ABox_ec: {len(abox_ec)}\tABox_ee_train:{len(abox_ee_train)}\tABox_ee_test:{len(abox_ee_test)}', flush=True)
     
-    pdb.set_trace()
-    
-    # ggi_dataset_train = EEDataset(cfg, abox_ee_train, e_dict, already_ts_dict, already_hs_dict, stage='train')
+    ee_dataset_train = EEDataset(cfg, abox_ee_train, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage='train')
     # ggi_dataset_test = EEDataset(cfg, abox_ee_test, e_dict, already_ts_dict, already_hs_dict, stage='test')
     # abox_ec_dataset = AboxECDataset(cfg, abox_ec, e_dict)
     # abox_ec_created_dataset = AboxECCreatedDataset(cfg, abox_ec_created, e_dict)
     # tbox_name_dataset = NaiveDataset(torch.tensor(tbox_name_train.values))
     # tbox_desc_dataset = NaiveDataset(tbox_desc_train)
     
-    # ggi_dataloader_train = torch.utils.data.DataLoader(dataset=ggi_dataset_train, 
-    #                                                     batch_size=cfg.bs_ee,
-    #                                                     # num_workers=4,
-    #                                                     shuffle=True,
-    #                                                     drop_last=True)
+    ee_dataloader_train = torch.utils.data.DataLoader(dataset=ee_dataset_train, 
+                                                        batch_size=cfg.bs_ee,
+                                                        num_workers=4,
+                                                        shuffle=True,
+                                                        drop_last=True)
     # ggi_dataloader_test = torch.utils.data.DataLoader(dataset=ggi_dataset_test, 
     #                                                     batch_size=1,
     #                                                     # num_workers=4,
