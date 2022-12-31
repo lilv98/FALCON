@@ -162,15 +162,12 @@ def read_abox_ee(cfg):
 def read_abox_ec(cfg):
     pheno_prefix = 'http://purl.obolibrary.org/obo/'
     ret = []
-    alleles = set()
     with open(cfg.data_root + 'MGI_Geno_DiseaseDO.rpt') as f:
         for line in f:
             line = line.strip('\n').split('\t')
             allele_id = line[2].replace(':', '_')
             pheno_id = line[4].replace(':', '_')
             ret.append([allele_id, 'hasPhenotype', '<' + pheno_prefix + pheno_id + '>'])
-            alleles.add(allele_id)
-    omims = set()
     with open(cfg.data_root + 'phenotype.hpoa') as f:
         for line in f:
             if line[0] != '#':
@@ -178,9 +175,8 @@ def read_abox_ec(cfg):
                 omim_id = line[0].replace(':', '_')
                 pheno_id = line[3].replace(':', '_')
                 ret.append([omim_id, 'hasPhenotype', '<' + pheno_prefix + pheno_id + '>'])
-                omims.add(omim_id)
     ret = pd.DataFrame(ret, columns=['h', 'r', 't']).drop_duplicates()
-    return ret, alleles, omims
+    return ret
 
 def get_abox_ec_created(all_concepts, k):
     ret = []
@@ -193,16 +189,15 @@ def get_abox_ec_created(all_concepts, k):
 
 def get_data(cfg):
     tbox_name_train, tbox_desc_train, all_concepts, tbox_relations_train = extract_nodes(cfg, filename='pheno.txt')
-    abox_ec, alleles, omims = read_abox_ec(cfg)
+    abox_ec = read_abox_ec(cfg)
     abox_ee = read_abox_ee(cfg)
 
     abox_ec_created = get_abox_ec_created(all_concepts, k=cfg.n_abox_ec_created)
     created_entities = set(abox_ec_created.h.unique())
 
-    # all_entities = set(abox_ec.h.unique()) | set(abox_ee.h.unique()) | set(abox_ee.t.unique())
-    all_alleles = list(alleles | set(abox_ee.h.unique()))
+    all_alleles = list(set(abox_ee.h.unique()))
     print(f'Alleles: {len(all_alleles)}')
-    all_omims = list(omims | set(abox_ee.t.unique()))
+    all_omims = list(set(abox_ee.t.unique()))
     print(f'Omims: {len(all_omims)}')
     all_entities = [*all_alleles, *all_omims]
     all_relations = tbox_relations_train | set(['subClassOf', 'interactWith', 'hasPhenotype'])
@@ -274,13 +269,14 @@ class EEDataset(torch.utils.data.Dataset):
         head, rel, tail = pos
         already_ts = torch.tensor(self.already_ts_dict[(head.item(), rel.item())])
         already_hs = torch.tensor(self.already_hs_dict[(tail.item(), rel.item())])
-        neg_pool_t = torch.ones(len(self.all_omims))
+        neg_pool_t = torch.ones(len(self.all_alleles) + len(self.all_omims))
         neg_pool_t[already_ts] = 0
+        neg_pool_t[:len(self.all_alleles)] = 0
         neg_pool_t = neg_pool_t.nonzero()
         neg_pool_h = torch.ones(len(self.all_alleles))
         neg_pool_h[already_hs] = 0
         neg_pool_h = neg_pool_h.nonzero()
-        neg_t = neg_pool_t[torch.randint(len(neg_pool_t), (self.cfg.num_ng//2,))] + len(self.all_alleles)
+        neg_t = neg_pool_t[torch.randint(len(neg_pool_t), (self.cfg.num_ng//2,))]
         neg_h = neg_pool_h[torch.randint(len(neg_pool_h), (self.cfg.num_ng//2,))]
         return neg_t, neg_h
     
@@ -562,7 +558,7 @@ class FALCON(torch.nn.Module):
         else:
             raise ValueError
 
-    def forward_ggi(self, x, stage='train'):
+    def forward_ee(self, x, stage='train'):
         e_1_emb = self.e_embedding(x[:, :, 0])
         r_emb = self.r_embedding(x[:, :, 1])
         e_2_emb = self.e_embedding(x[:, :, 2])
@@ -662,7 +658,7 @@ def parse_args(args=None):
     parser.add_argument('--model', default='FALCON', type=str, help='FALCON, DistMult, TransE, ConvE')
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--wd', default=0, type=float)
-    parser.add_argument('--emb_dim', default=128, type=int)
+    parser.add_argument('--emb_dim', default=64, type=int)
     parser.add_argument('--num_ng', default=8, type=int)
     parser.add_argument('--n_models', default=2, type=int)
     parser.add_argument('--loss_type', default='r', type=str, help='r for ranking, c for classification')
@@ -670,10 +666,9 @@ def parse_args(args=None):
     parser.add_argument('--bs_ee', default=64, type=int)
     parser.add_argument('--bs_ec', default=64, type=int)
     parser.add_argument('--bs_tbox_name', default=64, type=int)
-    parser.add_argument('--bs_tbox_desc', default=4, type=int)
+    parser.add_argument('--bs_tbox_desc', default=1, type=int)
     parser.add_argument('--anon_e', default=4, type=int)
-    parser.add_argument('--n_e', default=1500, type=int)
-    parser.add_argument('--n_abox_ec_created', default=1000, type=int)
+    parser.add_argument('--n_abox_ec_created', default=500, type=int)
     parser.add_argument('--n_inconsistent', default=0, type=int)
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz')
     parser.add_argument('--residuum', default='notCorD', type=str)
@@ -708,12 +703,12 @@ if __name__ == '__main__':
     # ggi_dataset_test = EEDataset(cfg, abox_ee_test, e_dict, already_ts_dict, already_hs_dict, stage='test')
     # abox_ec_dataset = AboxECDataset(cfg, abox_ec, e_dict)
     # abox_ec_created_dataset = AboxECCreatedDataset(cfg, abox_ec_created, e_dict)
-    # tbox_name_dataset = NaiveDataset(torch.tensor(tbox_name_train.values))
-    # tbox_desc_dataset = NaiveDataset(tbox_desc_train)
+    tbox_name_dataset = NaiveDataset(torch.tensor(tbox_name_train.values))
+    tbox_desc_dataset = NaiveDataset(tbox_desc_train)
     
     ee_dataloader_train = torch.utils.data.DataLoader(dataset=ee_dataset_train, 
                                                         batch_size=cfg.bs_ee,
-                                                        num_workers=4,
+                                                        num_workers=2,
                                                         shuffle=True,
                                                         drop_last=True)
     # ggi_dataloader_test = torch.utils.data.DataLoader(dataset=ggi_dataset_test, 
@@ -731,60 +726,61 @@ if __name__ == '__main__':
     #                                                     # num_workers=4,
     #                                                     shuffle=True,
     #                                                     drop_last=True)
-    # tbox_name_dataloader = torch.utils.data.DataLoader(dataset=tbox_name_dataset, 
-    #                                                     batch_size=cfg.bs_tbox_name,
-    #                                                     shuffle=True,
-    #                                                     drop_last=True)
-    # tbox_desc_dataloader = torch.utils.data.DataLoader(dataset=tbox_desc_dataset, 
-    #                                                     batch_size=cfg.bs_tbox_desc,
-    #                                                     shuffle=True,
-    #                                                     drop_last=True)
+    tbox_name_dataloader = torch.utils.data.DataLoader(dataset=tbox_name_dataset, 
+                                                        batch_size=cfg.bs_tbox_name,
+                                                        shuffle=True,
+                                                        drop_last=True)
+    tbox_desc_dataloader = torch.utils.data.DataLoader(dataset=tbox_desc_dataset, 
+                                                        batch_size=cfg.bs_tbox_desc,
+                                                        shuffle=True,
+                                                        drop_last=True)
 
-    # ggi_dataloader_train = iterator(ggi_dataloader_train)
+    ee_dataloader_train = iterator(ee_dataloader_train)
     # abox_ec_dataloader = iterator(abox_ec_dataloader)
     # abox_ec_created_dataloader = iterator(abox_ec_created_dataloader)
-    # tbox_name_dataloader = iterator(tbox_name_dataloader)
-    # tbox_desc_dataloader = iterator(tbox_desc_dataloader)
+    tbox_name_dataloader = iterator(tbox_name_dataloader)
+    tbox_desc_dataloader = iterator(tbox_desc_dataloader)
     
-    # device = torch.device(f'cuda:{cfg.gpu}' if torch.cuda.is_available() else 'cpu')
-    # model = FALCON(c_dict, e_dict_more, r_dict, cfg, device)
-    # model = model.to(device)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.wd)
+    device = torch.device(f'cuda:{cfg.gpu}' if torch.cuda.is_available() else 'cpu')
+    model = FALCON(c_dict, e_dict_more, r_dict, cfg, device)
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.wd)
     
-    # weights = [5, 1, 1, 1, 1]
-    # if cfg.verbose:
-    #     ranger = tqdm.tqdm(range(cfg.max_steps))
-    # else:
-    #     ranger = range(cfg.max_steps)
-    # losses = []
-    # results = []
-    # for step in ranger:
-    #     model.train()
-    #     # anonymous entities
-    #     anon_e_emb_1 = model.e_embedding.weight.detach()[:cfg.anon_e//2] + torch.normal(0, 0.1, size=(cfg.anon_e//2, cfg.emb_dim)).to(device)
-    #     anon_e_emb_2 = torch.rand(cfg.anon_e//2, cfg.emb_dim).to(device)
-    #     torch.nn.init.xavier_uniform_(anon_e_emb_2)
-    #     anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
+    weights = [5, 1, 1, 1, 1]
+    if cfg.verbose:
+        ranger = tqdm.tqdm(range(cfg.max_steps))
+    else:
+        ranger = range(cfg.max_steps)
+    losses = []
+    results = []
+    for step in ranger:
+        model.train()
+        # anonymous entities
+        anon_e_emb_1 = model.e_embedding.weight.detach()[:cfg.anon_e//2] + torch.normal(0, 0.1, size=(cfg.anon_e//2, cfg.emb_dim)).to(device)
+        anon_e_emb_2 = torch.rand(cfg.anon_e//2, cfg.emb_dim).to(device)
+        torch.nn.init.xavier_uniform_(anon_e_emb_2)
+        anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
 
-    #     # ggi loss
-    #     loss_ggi = model.forward_ggi(next(ggi_dataloader_train).to(device).long())
+        # ee loss
+        loss_ee = model.forward_ee(next(ee_dataloader_train).to(device).long())
         
-    #     # abox_ec loss
-    #     loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
+        # # abox_ec loss
+        # loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
 
-    #     # abox_ec_created loss
-    #     loss_abox_ec_created = model.forward_abox_ec_created(next(abox_ec_created_dataloader).to(device).long())
+        # # abox_ec_created loss
+        # loss_abox_ec_created = model.forward_abox_ec_created(next(abox_ec_created_dataloader).to(device).long())
         
-    #     # tbox_name loss
-    #     tbox_name_batch = next(tbox_name_dataloader).to(device).long()
-    #     loss_tbox_name = model.forward_name(tbox_name_batch, anon_e_emb)
+        # tbox_name loss
+        tbox_name_batch = next(tbox_name_dataloader).to(device).long()
+        loss_tbox_name = model.forward_name(tbox_name_batch, anon_e_emb)
         
-    #     # tbox_description loss
-    #     loss_tbox_desc = []
-    #     for axiom in next(tbox_desc_dataloader):
-    #         fs = model.forward(axiom, anon_e_emb)
-    #         loss_tbox_desc.append(model.get_cc_loss(fs))
-    #     loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
+        # tbox_description loss
+        loss_tbox_desc = []
+        for axiom in next(tbox_desc_dataloader):
+            fs = model.forward(axiom, anon_e_emb)
+            loss_tbox_desc.append(model.get_cc_loss(fs))
+        loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
+        pdb.set_trace()
         
     #     loss = (loss_ggi * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
     #     # if torch.isnan(loss):
