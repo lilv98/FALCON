@@ -260,7 +260,6 @@ class EEDataset(torch.utils.data.Dataset):
         self.all_alleles = all_alleles
         self.all_omims = all_omims
         self.data = torch.tensor(data.values)
-        self.all_candidate = torch.arange(len(e_dict)).unsqueeze(dim=-1)
         self.neg_shape = torch.zeros(self.cfg.num_ng//2, 1)
         self.already_ts_dict = already_ts_dict
         self.already_hs_dict = already_hs_dict
@@ -292,9 +291,9 @@ class EEDataset(torch.utils.data.Dataset):
             return torch.cat([pos.unsqueeze(dim=0), replace_tail, replace_head], dim=0)
         elif self.stage == 'test':
             pos = self.data[idx]
-            replace_tail = torch.cat([pos[0].expand_as(self.all_candidate), pos[1].expand_as(self.all_candidate), self.all_candidate], dim=-1)
-            replace_head = torch.cat([self.all_candidate, pos[1].expand_as(self.all_candidate), pos[2].expand_as(self.all_candidate)], dim=-1)
-            return torch.cat([replace_head, replace_tail], dim=0), pos
+            all_candidate = torch.arange(len(self.all_omims)).unsqueeze(dim=-1) + len(self.all_alleles)
+            X = torch.cat([pos[1].expand_as(all_candidate), pos[1].expand_as(all_candidate), all_candidate], dim=-1)
+            return X, pos
         else:
             raise ValueError
 
@@ -578,22 +577,14 @@ class FALCON(torch.nn.Module):
             return torch.sigmoid(self.fc_0(emb)).flatten()
             # return torch.sigmoid(self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1))).flatten()
 
-def get_ranks(logits, y, already_ts_dict, already_hs_dict, flag):
-    logits_sorted = torch.argsort(logits.cpu(), dim=-1, descending=True)
-    if flag == 'head':
-        ranks = ((logits_sorted == y[0]).nonzero()[0][0] + 1).long()
-        key = (y[2].item(), y[1].item())
-        try:
-            already = already_hs_dict[key]
-        except:
-            already = None
-    elif flag == 'tail':
-        ranks = ((logits_sorted == y[2]).nonzero()[0][0] + 1).long()
-        key = (y[0].item(), y[1].item())
-        try:
-            already = already_ts_dict[key]
-        except:
-            already = None
+def get_ranks(logits, y, already_ts_dict, all_alleles):
+    logits_sorted = torch.argsort(logits.cpu(), dim=-1, descending=True) + len(all_alleles)
+    ranks = ((logits_sorted == y[2]).nonzero()[0][0] + 1).long()
+    key = (y[0].item(), y[1].item())
+    try:
+        already = already_ts_dict[key]
+    except:
+        already = None
     ranking_better = logits_sorted[:ranks - 1]
     if already != None:
         for e in already:
@@ -606,24 +597,17 @@ def get_ranks(logits, y, already_ts_dict, already_hs_dict, flag):
     h10 = (ranks <= 10).float().item()
     return r, rr, h1, h3, h10
 
-def ggi_evaluate(model, loader, e_dict, device, already_ts_dict, already_hs_dict):
+def ee_evaluate(model, loader, e_dict, device, already_ts_dict, all_alleles):
     model.eval()
     mr, mrr, mh1, mh3, mh10 = 0, 0, 0, 0, 0
     with torch.no_grad():
         for X, y in loader:
             X = X.to(device)
-            if model.__class__.__name__ == 'FuzzyDL':
-                logits = model.forward_ggi(X, stage='test')
+            if model.__class__.__name__ == 'FALCON':
+                logits = model.forward_ee(X, stage='test')
             elif model.__class__.__name__ == 'KGCModel':
                 logits = model.forward(X).flatten()
-            logits_head, logits_tail = logits[:len(e_dict)], logits[len(e_dict):]
-            r, rr, h1, h3, h10 = get_ranks(logits_head, y[0], already_ts_dict, already_hs_dict, flag='head')
-            mr += r
-            mrr += rr
-            mh1 += h1
-            mh3 += h3
-            mh10 += h10
-            r, rr, h1, h3, h10 = get_ranks(logits_tail, y[0], already_ts_dict, already_hs_dict, flag='tail')
+            r, rr, h1, h3, h10 = get_ranks(logits, y[0], already_ts_dict, all_alleles)
             mr += r
             mrr += rr
             mh1 += h1
@@ -700,7 +684,7 @@ if __name__ == '__main__':
         ABox_ec: {len(abox_ec)}\tABox_ee_train:{len(abox_ee_train)}\tABox_ee_test:{len(abox_ee_test)}', flush=True)
     
     ee_dataset_train = EEDataset(cfg, abox_ee_train, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage='train')
-    # ggi_dataset_test = EEDataset(cfg, abox_ee_test, e_dict, already_ts_dict, already_hs_dict, stage='test')
+    ee_dataset_test = EEDataset(cfg, abox_ee_test, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage='test')
     # abox_ec_dataset = AboxECDataset(cfg, abox_ec, e_dict)
     # abox_ec_created_dataset = AboxECCreatedDataset(cfg, abox_ec_created, e_dict)
     tbox_name_dataset = NaiveDataset(torch.tensor(tbox_name_train.values))
@@ -711,11 +695,11 @@ if __name__ == '__main__':
                                                         num_workers=2,
                                                         shuffle=True,
                                                         drop_last=True)
-    # ggi_dataloader_test = torch.utils.data.DataLoader(dataset=ggi_dataset_test, 
-    #                                                     batch_size=1,
-    #                                                     # num_workers=4,
-    #                                                     shuffle=False,
-    #                                                     drop_last=False)
+    ee_dataloader_test = torch.utils.data.DataLoader(dataset=ee_dataset_test, 
+                                                        batch_size=1,
+                                                        # num_workers=4,
+                                                        shuffle=False,
+                                                        drop_last=False)
     # abox_ec_dataloader = torch.utils.data.DataLoader(dataset=abox_ec_dataset, 
     #                                                     batch_size=cfg.bs_ec,
     #                                                     # num_workers=4,
@@ -754,33 +738,32 @@ if __name__ == '__main__':
     losses = []
     results = []
     for step in ranger:
-        model.train()
-        # anonymous entities
-        anon_e_emb_1 = model.e_embedding.weight.detach()[:cfg.anon_e//2] + torch.normal(0, 0.1, size=(cfg.anon_e//2, cfg.emb_dim)).to(device)
-        anon_e_emb_2 = torch.rand(cfg.anon_e//2, cfg.emb_dim).to(device)
-        torch.nn.init.xavier_uniform_(anon_e_emb_2)
-        anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
+        # model.train()
+        # # anonymous entities
+        # anon_e_emb_1 = model.e_embedding.weight.detach()[:cfg.anon_e//2] + torch.normal(0, 0.1, size=(cfg.anon_e//2, cfg.emb_dim)).to(device)
+        # anon_e_emb_2 = torch.rand(cfg.anon_e//2, cfg.emb_dim).to(device)
+        # torch.nn.init.xavier_uniform_(anon_e_emb_2)
+        # anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
 
-        # ee loss
-        loss_ee = model.forward_ee(next(ee_dataloader_train).to(device).long())
+        # # ee loss
+        # loss_ee = model.forward_ee(next(ee_dataloader_train).to(device).long())
         
-        # # abox_ec loss
-        # loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
+        # # # abox_ec loss
+        # # loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
 
-        # # abox_ec_created loss
-        # loss_abox_ec_created = model.forward_abox_ec_created(next(abox_ec_created_dataloader).to(device).long())
+        # # # abox_ec_created loss
+        # # loss_abox_ec_created = model.forward_abox_ec_created(next(abox_ec_created_dataloader).to(device).long())
         
-        # tbox_name loss
-        tbox_name_batch = next(tbox_name_dataloader).to(device).long()
-        loss_tbox_name = model.forward_name(tbox_name_batch, anon_e_emb)
+        # # tbox_name loss
+        # tbox_name_batch = next(tbox_name_dataloader).to(device).long()
+        # loss_tbox_name = model.forward_name(tbox_name_batch, anon_e_emb)
         
-        # tbox_description loss
-        loss_tbox_desc = []
-        for axiom in next(tbox_desc_dataloader):
-            fs = model.forward(axiom, anon_e_emb)
-            loss_tbox_desc.append(model.get_cc_loss(fs))
-        loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
-        pdb.set_trace()
+        # # tbox_description loss
+        # loss_tbox_desc = []
+        # for axiom in next(tbox_desc_dataloader):
+        #     fs = model.forward(axiom, anon_e_emb)
+        #     loss_tbox_desc.append(model.get_cc_loss(fs))
+        # loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
         
     #     loss = (loss_ggi * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
     #     # if torch.isnan(loss):
@@ -793,12 +776,12 @@ if __name__ == '__main__':
     #     optimizer.step()
     #     losses.append(loss.item())
         
-    #     if (step + 1) % cfg.valid_interval == 0:
-    #         avg_loss = round(sum(losses)/len(losses), 4)
-    #         print(f'Loss: {avg_loss}', flush=True)
-    #         losses = []
-    #         mrr, mh3, mh10 = ggi_evaluate(model, ggi_dataloader_test, e_dict, device, already_ts_dict, already_hs_dict)
-    #         print(f'#GGI# MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}', flush=True)
+        if (step + 1) % cfg.valid_interval == 0:
+            # avg_loss = round(sum(losses)/len(losses), 4)
+            # print(f'Loss: {avg_loss}', flush=True)
+            # losses = []
+            mrr, mh3, mh10 = ee_evaluate(model, ee_dataloader_test, e_dict, device, already_ts_dict, all_alleles)
+            print(f'MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}', flush=True)
     #         model.eval()
     #         with torch.no_grad():
     #             preds = []

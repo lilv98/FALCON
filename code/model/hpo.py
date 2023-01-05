@@ -694,7 +694,7 @@ def ggi_evaluate(model, loader, e_dict, device, already_ts_dict, already_hs_dict
     with torch.no_grad():
         for X, y in loader:
             X = X.to(device)
-            if model.__class__.__name__ == 'FuzzyDL':
+            if model.__class__.__name__ == 'FALCON':
                 logits = model.forward_ggi(X, stage='test')
             elif model.__class__.__name__ == 'KGCModel':
                 logits = model.forward(X).flatten()
