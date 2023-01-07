@@ -648,7 +648,7 @@ def parse_args(args=None):
     parser.add_argument('--loss_type', default='r', type=str, help='r for ranking, c for classification')
     parser.add_argument('--bs_kgc', default=64, type=int)
     parser.add_argument('--bs_ee', default=64, type=int)
-    parser.add_argument('--bs_ec', default=64, type=int)
+    parser.add_argument('--bs_ec', default=16, type=int)
     parser.add_argument('--bs_tbox_name', default=64, type=int)
     parser.add_argument('--bs_tbox_desc', default=1, type=int)
     parser.add_argument('--anon_e', default=4, type=int)
@@ -685,14 +685,14 @@ if __name__ == '__main__':
     
     ee_dataset_train = EEDataset(cfg, abox_ee_train, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage='train')
     ee_dataset_test = EEDataset(cfg, abox_ee_test, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage='test')
-    # abox_ec_dataset = AboxECDataset(cfg, abox_ec, e_dict)
-    # abox_ec_created_dataset = AboxECCreatedDataset(cfg, abox_ec_created, e_dict)
+    abox_ec_dataset = AboxECDataset(cfg, abox_ec, e_dict)
+    abox_ec_created_dataset = AboxECCreatedDataset(cfg, abox_ec_created, e_dict)
     tbox_name_dataset = NaiveDataset(torch.tensor(tbox_name_train.values))
     tbox_desc_dataset = NaiveDataset(tbox_desc_train)
     
     ee_dataloader_train = torch.utils.data.DataLoader(dataset=ee_dataset_train, 
                                                         batch_size=cfg.bs_ee,
-                                                        num_workers=2,
+                                                        # num_workers=2,
                                                         shuffle=True,
                                                         drop_last=True)
     ee_dataloader_test = torch.utils.data.DataLoader(dataset=ee_dataset_test, 
@@ -700,16 +700,16 @@ if __name__ == '__main__':
                                                         # num_workers=4,
                                                         shuffle=False,
                                                         drop_last=False)
-    # abox_ec_dataloader = torch.utils.data.DataLoader(dataset=abox_ec_dataset, 
-    #                                                     batch_size=cfg.bs_ec,
-    #                                                     # num_workers=4,
-    #                                                     shuffle=True,
-    #                                                     drop_last=True)
-    # abox_ec_created_dataloader = torch.utils.data.DataLoader(dataset=abox_ec_created_dataset, 
-    #                                                     batch_size=cfg.bs_ec,
-    #                                                     # num_workers=4,
-    #                                                     shuffle=True,
-    #                                                     drop_last=True)
+    abox_ec_dataloader = torch.utils.data.DataLoader(dataset=abox_ec_dataset, 
+                                                        batch_size=cfg.bs_ec,
+                                                        # num_workers=4,
+                                                        shuffle=True,
+                                                        drop_last=True)
+    abox_ec_created_dataloader = torch.utils.data.DataLoader(dataset=abox_ec_created_dataset, 
+                                                        batch_size=cfg.bs_ec,
+                                                        num_workers=4,
+                                                        shuffle=True,
+                                                        drop_last=True)
     tbox_name_dataloader = torch.utils.data.DataLoader(dataset=tbox_name_dataset, 
                                                         batch_size=cfg.bs_tbox_name,
                                                         shuffle=True,
@@ -720,8 +720,8 @@ if __name__ == '__main__':
                                                         drop_last=True)
 
     ee_dataloader_train = iterator(ee_dataloader_train)
-    # abox_ec_dataloader = iterator(abox_ec_dataloader)
-    # abox_ec_created_dataloader = iterator(abox_ec_created_dataloader)
+    abox_ec_dataloader = iterator(abox_ec_dataloader)
+    abox_ec_created_dataloader = iterator(abox_ec_created_dataloader)
     tbox_name_dataloader = iterator(tbox_name_dataloader)
     tbox_desc_dataloader = iterator(tbox_desc_dataloader)
     
@@ -738,43 +738,43 @@ if __name__ == '__main__':
     losses = []
     results = []
     for step in ranger:
-        # model.train()
-        # # anonymous entities
-        # anon_e_emb_1 = model.e_embedding.weight.detach()[:cfg.anon_e//2] + torch.normal(0, 0.1, size=(cfg.anon_e//2, cfg.emb_dim)).to(device)
-        # anon_e_emb_2 = torch.rand(cfg.anon_e//2, cfg.emb_dim).to(device)
-        # torch.nn.init.xavier_uniform_(anon_e_emb_2)
-        # anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
+        model.train()
+        # anonymous entities
+        anon_e_emb_1 = model.e_embedding.weight.detach()[:cfg.anon_e//2] + torch.normal(0, 0.1, size=(cfg.anon_e//2, cfg.emb_dim)).to(device)
+        anon_e_emb_2 = torch.rand(cfg.anon_e//2, cfg.emb_dim).to(device)
+        torch.nn.init.xavier_uniform_(anon_e_emb_2)
+        anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
 
-        # # ee loss
-        # loss_ee = model.forward_ee(next(ee_dataloader_train).to(device).long())
+        # ee loss
+        loss_ee = model.forward_ee(next(ee_dataloader_train).to(device).long())
         
-        # # # abox_ec loss
-        # # loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
+        # abox_ec loss
+        loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
 
-        # # # abox_ec_created loss
-        # # loss_abox_ec_created = model.forward_abox_ec_created(next(abox_ec_created_dataloader).to(device).long())
+        # abox_ec_created loss
+        loss_abox_ec_created = model.forward_abox_ec_created(next(abox_ec_created_dataloader).to(device).long())
         
-        # # tbox_name loss
-        # tbox_name_batch = next(tbox_name_dataloader).to(device).long()
-        # loss_tbox_name = model.forward_name(tbox_name_batch, anon_e_emb)
+        # tbox_name loss
+        tbox_name_batch = next(tbox_name_dataloader).to(device).long()
+        loss_tbox_name = model.forward_name(tbox_name_batch, anon_e_emb)
         
-        # # tbox_description loss
-        # loss_tbox_desc = []
-        # for axiom in next(tbox_desc_dataloader):
-        #     fs = model.forward(axiom, anon_e_emb)
-        #     loss_tbox_desc.append(model.get_cc_loss(fs))
-        # loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
+        # tbox_description loss
+        loss_tbox_desc = []
+        for axiom in next(tbox_desc_dataloader):
+            fs = model.forward(axiom, anon_e_emb)
+            loss_tbox_desc.append(model.get_cc_loss(fs))
+        loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
         
-    #     loss = (loss_ggi * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
-    #     # if torch.isnan(loss):
-    #     #     pdb.set_trace()
-    #     # if (step + 1) % (cfg.valid_interval // 10) == 0:
-    #     #     print(round(loss_ggi.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
+        loss = (loss_ee * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
+        # if torch.isnan(loss):
+        #     pdb.set_trace()
+        # if (step + 1) % (cfg.valid_interval // 10) == 0:
+        #     print(round(loss_ggi.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
         
-    #     optimizer.zero_grad()
-    #     loss.backward()
-    #     optimizer.step()
-    #     losses.append(loss.item())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        losses.append(loss.item())
         
         if (step + 1) % cfg.valid_interval == 0:
             # avg_loss = round(sum(losses)/len(losses), 4)
