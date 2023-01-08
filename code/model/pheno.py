@@ -642,13 +642,13 @@ def parse_args(args=None):
     parser.add_argument('--model', default='FALCON', type=str, help='FALCON, DistMult, TransE, ConvE')
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--wd', default=0, type=float)
-    parser.add_argument('--emb_dim', default=64, type=int)
+    parser.add_argument('--emb_dim', default=32, type=int)
     parser.add_argument('--num_ng', default=8, type=int)
     parser.add_argument('--n_models', default=2, type=int)
     parser.add_argument('--loss_type', default='r', type=str, help='r for ranking, c for classification')
     parser.add_argument('--bs_kgc', default=64, type=int)
     parser.add_argument('--bs_ee', default=64, type=int)
-    parser.add_argument('--bs_ec', default=16, type=int)
+    parser.add_argument('--bs_ec', default=64, type=int)
     parser.add_argument('--bs_tbox_name', default=64, type=int)
     parser.add_argument('--bs_tbox_desc', default=1, type=int)
     parser.add_argument('--anon_e', default=4, type=int)
@@ -768,8 +768,8 @@ if __name__ == '__main__':
         loss = (loss_ee * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
         # if torch.isnan(loss):
         #     pdb.set_trace()
-        # if (step + 1) % (cfg.valid_interval // 10) == 0:
-        #     print(round(loss_ggi.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
+        if (step + 1) % (cfg.valid_interval // 10) == 0:
+            print(round(loss_ee.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
         
         optimizer.zero_grad()
         loss.backward()
@@ -777,27 +777,15 @@ if __name__ == '__main__':
         losses.append(loss.item())
         
         if (step + 1) % cfg.valid_interval == 0:
-            # avg_loss = round(sum(losses)/len(losses), 4)
-            # print(f'Loss: {avg_loss}', flush=True)
-            # losses = []
+            avg_loss = round(sum(losses)/len(losses), 4)
+            print(f'Loss: {avg_loss}', flush=True)
+            losses = []
             mrr, mh3, mh10 = ee_evaluate(model, ee_dataloader_test, e_dict, device, already_ts_dict, all_alleles)
             print(f'MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}', flush=True)
-    #         model.eval()
-    #         with torch.no_grad():
-    #             preds = []
-    #             for axiom in tbox_test_pos:
-    #                 fs = model.forward(axiom, anon_e_emb)
-    #                 preds.append(max(fs).item())
-    #             for axiom in tbox_test_neg:
-    #                 fs = model.forward(axiom, anon_e_emb)
-    #                 preds.append(max(fs).item())
-    #         mae_pos, auc, aupr, fmax = compute_metrics(preds)
-    #         print(f'#TBox# MAE:{mae_pos}\tAUC:{auc}\tAUPR:{aupr}\tFmax:{fmax}')
-    #         results.append([mrr, mh3, mh10, mae_pos, auc, aupr, fmax])
-    # results = torch.tensor(results)
-    # final_results = results[results.transpose(1, 0).max(dim=-1)[1][0]]
-    # print(results)
-    # mrr, mh3, mh10, mae_pos, auc, aupr, fmax = final_results
-    # print(f'Best: #GGI# MRR: {round(mrr.item(), 3)}\tH3: {round(mh3.item(), 3)}\tH10: {round(mh10.item(), 3)}', flush=True)
-    # print(f'Best: #TBox# MAE:{round(mae_pos.item(), 3)}\tAUC:{round(auc.item(), 3)}\tAUPR:{round(aupr.item(), 3)}\tFmax:{round(fmax.item(), 3)}')
+            results.append([mrr, mh3, mh10])
+    results = torch.tensor(results)
+    final_results = results[results.transpose(1, 0).max(dim=-1)[1][0]]
+    print(results)
+    mrr, mh3, mh10 = final_results
+    print(f'Best: #EE# MRR: {round(mrr.item(), 3)}\tH3: {round(mh3.item(), 3)}\tH10: {round(mh10.item(), 3)}', flush=True)
 
