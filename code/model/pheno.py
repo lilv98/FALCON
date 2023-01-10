@@ -618,7 +618,7 @@ def ee_evaluate(model, loader, e_dict, device, already_ts_dict, all_alleles):
             mh3 += h3
             mh10 += h10
             mauc += auc
-    counter = len(e_dict) * 2
+    counter = len(loader)
     _, mrr, _, mh3, mh10, mauc = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3), round(mauc/counter, 3)
     return mrr, mh3, mh10, mauc
 
@@ -662,10 +662,10 @@ def parse_args(args=None):
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz')
     parser.add_argument('--residuum', default='notCorD', type=str)
     parser.add_argument('--max_measure', default='max', type=str)
-    parser.add_argument('--scoring_fct_norm', default=2, type=float)  
-    parser.add_argument('--kernel_size', default=3, type=int)           
-    parser.add_argument('--convkb_drop_prob', default=0.2, type=float)  
-    parser.add_argument('--out_channels', default=8, type=int)        
+    parser.add_argument('--scoring_fct_norm', default=2, type=float)
+    parser.add_argument('--kernel_size', default=3, type=int)
+    parser.add_argument('--convkb_drop_prob', default=0.2, type=float)
+    parser.add_argument('--out_channels', default=8, type=int)
     # Untunable
     parser.add_argument('--data_root', default='../../data/pheno/', type=str)
     parser.add_argument('--max_steps', default=100000, type=int)
@@ -735,7 +735,7 @@ if __name__ == '__main__':
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.wd)
     
-    weights = [2, 2, 1, 1, 1]
+    weights = [5, 1, 1, 1, 1]
     if cfg.verbose:
         ranger = tqdm.tqdm(range(cfg.max_steps))
     else:
@@ -789,6 +789,6 @@ if __name__ == '__main__':
     results = torch.tensor(results)
     final_results = results[results.transpose(1, 0).max(dim=-1)[1][0]]
     print(results)
-    mrr, mh3, mh10 = final_results
+    mrr, mh3, mh10, mauc = final_results
     print(f'Best: #EE# MRR: {round(mrr.item(), 3)}\tH3: {round(mh3.item(), 3)}\tH10: {round(mh10.item(), 3)}\tAUC: {round(mauc.item(), 3)}', flush=True)
 
