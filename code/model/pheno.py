@@ -580,6 +580,9 @@ class FALCON(torch.nn.Module):
 def get_ranks(logits, y, already_ts_dict, all_alleles):
     logits_sorted = torch.argsort(logits.cpu(), dim=-1, descending=True) + len(all_alleles)
     ranks = ((logits_sorted == y[2]).nonzero()[0][0] + 1).long()
+    labels = torch.zeros(len(logits_sorted))
+    labels[ranks - 1] = 1
+    auc = roc_auc_score(labels.long(), logits_sorted.numpy())
     key = (y[0].item(), y[1].item())
     try:
         already = already_ts_dict[key]
@@ -590,16 +593,17 @@ def get_ranks(logits, y, already_ts_dict, all_alleles):
         for e in already:
             if (ranking_better == e).sum() == 1:
                 ranks -= 1
+    # ranks = torch.randint(len(logits), (1, )) + 1
     r = ranks.item()
     rr = (1 / ranks).item()
     h1 = (ranks == 1).float().item()
     h3 = (ranks <= 3).float().item()
     h10 = (ranks <= 10).float().item()
-    return r, rr, h1, h3, h10
+    return r, rr, h1, h3, h10, auc
 
 def ee_evaluate(model, loader, e_dict, device, already_ts_dict, all_alleles):
     model.eval()
-    mr, mrr, mh1, mh3, mh10 = 0, 0, 0, 0, 0
+    mr, mrr, mh1, mh3, mh10, mauc = 0, 0, 0, 0, 0, 0
     with torch.no_grad():
         for X, y in loader:
             X = X.to(device)
@@ -607,15 +611,16 @@ def ee_evaluate(model, loader, e_dict, device, already_ts_dict, all_alleles):
                 logits = model.forward_ee(X, stage='test')
             elif model.__class__.__name__ == 'KGCModel':
                 logits = model.forward(X).flatten()
-            r, rr, h1, h3, h10 = get_ranks(logits, y[0], already_ts_dict, all_alleles)
+            r, rr, h1, h3, h10, auc = get_ranks(logits, y[0], already_ts_dict, all_alleles)
             mr += r
             mrr += rr
             mh1 += h1
             mh3 += h3
             mh10 += h10
+            mauc += auc
     counter = len(e_dict) * 2
-    _, mrr, _, mh3, mh10 = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3)
-    return mrr, mh3, mh10
+    _, mrr, _, mh3, mh10, mauc = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3), round(mauc/counter, 3)
+    return mrr, mh3, mh10, mauc
 
 def iterator(dataloader):
     while True:
@@ -638,7 +643,7 @@ def compute_metrics(preds):
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser()
-    # Tuable
+    # Tunable
     parser.add_argument('--model', default='FALCON', type=str, help='FALCON, DistMult, TransE, ConvE')
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--wd', default=0, type=float)
@@ -652,7 +657,7 @@ def parse_args(args=None):
     parser.add_argument('--bs_tbox_name', default=64, type=int)
     parser.add_argument('--bs_tbox_desc', default=1, type=int)
     parser.add_argument('--anon_e', default=4, type=int)
-    parser.add_argument('--n_abox_ec_created', default=500, type=int)
+    parser.add_argument('--n_abox_ec_created', default=1000, type=int)
     parser.add_argument('--n_inconsistent', default=0, type=int)
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz')
     parser.add_argument('--residuum', default='notCorD', type=str)
@@ -665,7 +670,7 @@ def parse_args(args=None):
     parser.add_argument('--data_root', default='../../data/pheno/', type=str)
     parser.add_argument('--max_steps', default=100000, type=int)
     parser.add_argument('--valid_interval', default=1000, type=int)
-    parser.add_argument('--tolerance', default=10, type=int)
+    parser.add_argument('--tolerance', default=5, type=int)
     parser.add_argument('--verbose', default=1, type=int)
     parser.add_argument('--gpu', default=0, type=int)
     return parser.parse_args(args)
@@ -730,7 +735,7 @@ if __name__ == '__main__':
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.wd)
     
-    weights = [5, 1, 1, 1, 1]
+    weights = [2, 2, 1, 1, 1]
     if cfg.verbose:
         ranger = tqdm.tqdm(range(cfg.max_steps))
     else:
@@ -766,8 +771,6 @@ if __name__ == '__main__':
         loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
         
         loss = (loss_ee * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
-        # if torch.isnan(loss):
-        #     pdb.set_trace()
         if (step + 1) % (cfg.valid_interval // 10) == 0:
             print(round(loss_ee.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
         
@@ -780,12 +783,12 @@ if __name__ == '__main__':
             avg_loss = round(sum(losses)/len(losses), 4)
             print(f'Loss: {avg_loss}', flush=True)
             losses = []
-            mrr, mh3, mh10 = ee_evaluate(model, ee_dataloader_test, e_dict, device, already_ts_dict, all_alleles)
-            print(f'MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}', flush=True)
-            results.append([mrr, mh3, mh10])
+            mrr, mh3, mh10, mauc = ee_evaluate(model, ee_dataloader_test, e_dict, device, already_ts_dict, all_alleles)
+            print(f'MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}, AUC: {mauc}', flush=True)
+            results.append([mrr, mh3, mh10, mauc])
     results = torch.tensor(results)
     final_results = results[results.transpose(1, 0).max(dim=-1)[1][0]]
     print(results)
     mrr, mh3, mh10 = final_results
-    print(f'Best: #EE# MRR: {round(mrr.item(), 3)}\tH3: {round(mh3.item(), 3)}\tH10: {round(mh10.item(), 3)}', flush=True)
+    print(f'Best: #EE# MRR: {round(mrr.item(), 3)}\tH3: {round(mh3.item(), 3)}\tH10: {round(mh10.item(), 3)}\tAUC: {round(mauc.item(), 3)}', flush=True)
 
