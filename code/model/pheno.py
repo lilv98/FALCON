@@ -580,9 +580,6 @@ class FALCON(torch.nn.Module):
 def get_ranks(logits, y, already_ts_dict, all_alleles):
     logits_sorted = torch.argsort(logits.cpu(), dim=-1, descending=True) + len(all_alleles)
     ranks = ((logits_sorted == y[2]).nonzero()[0][0] + 1).long()
-    labels = torch.zeros(len(logits_sorted))
-    labels[ranks - 1] = 1
-    auc = roc_auc_score(labels.long(), logits_sorted.numpy())
     key = (y[0].item(), y[1].item())
     try:
         already = already_ts_dict[key]
@@ -597,49 +594,31 @@ def get_ranks(logits, y, already_ts_dict, all_alleles):
     r = ranks.item()
     rr = (1 / ranks).item()
     h1 = (ranks == 1).float().item()
-    h3 = (ranks <= 3).float().item()
-    h10 = (ranks <= 10).float().item()
-    return r, rr, h1, h3, h10, auc
+    h3 = (ranks <= 10).float().item()
+    h10 = (ranks <= 50).float().item()
+    return r, rr, h1, h3, h10
 
 def ee_evaluate(model, loader, e_dict, device, already_ts_dict, all_alleles):
     model.eval()
-    mr, mrr, mh1, mh3, mh10, mauc = 0, 0, 0, 0, 0, 0
+    mr, mrr, mh1, mh3, mh10 = 0, 0, 0, 0, 0
     with torch.no_grad():
         for X, y in loader:
             X = X.to(device)
-            if model.__class__.__name__ == 'FALCON':
-                logits = model.forward_ee(X, stage='test')
-            elif model.__class__.__name__ == 'KGCModel':
-                logits = model.forward(X).flatten()
-            r, rr, h1, h3, h10, auc = get_ranks(logits, y[0], already_ts_dict, all_alleles)
+            logits = model.forward_ee(X, stage='test')
+            r, rr, h1, h3, h10 = get_ranks(logits, y[0], already_ts_dict, all_alleles)
             mr += r
             mrr += rr
             mh1 += h1
             mh3 += h3
             mh10 += h10
-            mauc += auc
     counter = len(loader)
-    _, mrr, _, mh3, mh10, mauc = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3), round(mauc/counter, 3)
-    return mrr, mh3, mh10, mauc
+    _, mrr, _, mh3, mh10 = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3)
+    return mrr, mh3, mh10
 
 def iterator(dataloader):
     while True:
         for data in dataloader:
             yield data
-
-def compute_metrics(preds):
-    n_pos = n_neg = len(preds) // 2
-    labels = [0] * n_pos + [1] * n_neg
-    
-    mae_pos = round(sum(preds[:n_pos]) / n_pos, 4)
-    auc = round(roc_auc_score(labels, preds), 4)
-    aupr = round(average_precision_score(labels, preds), 4)
-    
-    precision, recall, _ = precision_recall_curve(labels, preds)
-    f1_scores = 2 * recall * precision / (recall + precision + 1e-10)
-    fmax = round(np.max(f1_scores), 4)
-    
-    return mae_pos, auc, aupr, fmax
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser()
@@ -773,7 +752,11 @@ if __name__ == '__main__':
         loss = (loss_ee * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
         if (step + 1) % (cfg.valid_interval // 10) == 0:
             print(round(loss_ee.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
-        
+
+        # loss = (loss_ee * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3]) / sum(weights)
+        # if (step + 1) % (cfg.valid_interval // 10) == 0:
+        #     print(round(loss_ee.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss.item(), 4))
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -783,12 +766,12 @@ if __name__ == '__main__':
             avg_loss = round(sum(losses)/len(losses), 4)
             print(f'Loss: {avg_loss}', flush=True)
             losses = []
-            mrr, mh3, mh10, mauc = ee_evaluate(model, ee_dataloader_test, e_dict, device, already_ts_dict, all_alleles)
-            print(f'MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}, AUC: {mauc}', flush=True)
-            results.append([mrr, mh3, mh10, mauc])
+            mrr, mh3, mh10 = ee_evaluate(model, ee_dataloader_test, e_dict, device, already_ts_dict, all_alleles)
+            print(f'MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}', flush=True)
+            results.append([mrr, mh3, mh10])
     results = torch.tensor(results)
     final_results = results[results.transpose(1, 0).max(dim=-1)[1][0]]
     print(results)
-    mrr, mh3, mh10, mauc = final_results
-    print(f'Best: #EE# MRR: {round(mrr.item(), 3)}\tH3: {round(mh3.item(), 3)}\tH10: {round(mh10.item(), 3)}\tAUC: {round(mauc.item(), 3)}', flush=True)
+    mrr, mh3, mh10 = final_results
+    print(f'Best: #EE# MRR: {round(mrr.item(), 3)}\tH10: {round(mh3.item(), 3)}\tH50: {round(mh10.item(), 3)}', flush=True)
 
