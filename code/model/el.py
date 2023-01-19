@@ -689,11 +689,11 @@ def parse_args(args=None):
     parser.add_argument('--bs_kgc', default=64, type=int)
     parser.add_argument('--bs_ee', default=64, type=int)
     parser.add_argument('--bs_ec', default=64, type=int)
-    parser.add_argument('--bs_tbox_name', default=64, type=int)
+    parser.add_argument('--bs_tbox_name', default=32, type=int)
     parser.add_argument('--bs_tbox_desc', default=4, type=int)
     parser.add_argument('--anon_e', default=4, type=int)
     parser.add_argument('--n_e', default=1500, type=int)
-    parser.add_argument('--n_abox_ec_created', default=900, type=int)
+    parser.add_argument('--n_abox_ec_created', default=800, type=int)
     parser.add_argument('--n_inconsistent', default=0, type=int)
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz')
     parser.add_argument('--residuum', default='notCorD', type=str)
@@ -776,44 +776,50 @@ if __name__ == '__main__':
         ranger = range(cfg.max_steps)
     losses = []
     results = []
+    scaler = torch.cuda.amp.GradScaler()
+    
     for step in ranger:
-        model.train()
-        # anonymous entities
-        anon_e_emb_1 = model.e_embedding.weight.detach()[:cfg.anon_e//2] + torch.normal(0, 0.1, size=(cfg.anon_e//2, cfg.emb_dim)).to(device)
-        anon_e_emb_2 = torch.rand(cfg.anon_e//2, cfg.emb_dim).to(device)
-        torch.nn.init.xavier_uniform_(anon_e_emb_2)
-        anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
-
-        # ggi loss
-        loss_ggi = model.forward_ggi(next(ggi_dataloader_train).to(device).long())
-        
-        # abox_ec loss
-        loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
-
-        # abox_ec_created loss
-        loss_abox_ec_created = model.forward_abox_ec_created(next(abox_ec_created_dataloader).to(device).long())
-        
-        # tbox_name loss
-        tbox_name_batch = next(tbox_name_dataloader).to(device).long()
-        loss_tbox_name = model.forward_name(tbox_name_batch, anon_e_emb)
-        
-        # tbox_description loss
-        loss_tbox_desc = []
-        for axiom in next(tbox_desc_dataloader):
-            fs = model.forward(axiom, anon_e_emb)
-            loss_tbox_desc.append(model.get_cc_loss(fs))
-        loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
-        
-        loss = (loss_ggi * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
-        # if torch.isnan(loss):
-        #     pdb.set_trace()
-        # if (step + 1) % (cfg.valid_interval // 10) == 0:
-        #     print(round(loss_ggi.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
-        
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        losses.append(loss.item())
+        model.train()
+        with torch.cuda.amp.autocast():
+            # anonymous entities
+            anon_e_emb_1 = model.e_embedding.weight.detach()[:cfg.anon_e//2] + torch.normal(0, 0.1, size=(cfg.anon_e//2, cfg.emb_dim)).to(device)
+            anon_e_emb_2 = torch.rand(cfg.anon_e//2, cfg.emb_dim).to(device)
+            torch.nn.init.xavier_uniform_(anon_e_emb_2)
+            anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
+
+            # ggi loss
+            loss_ggi = model.forward_ggi(next(ggi_dataloader_train).to(device).long())
+            
+            # abox_ec loss
+            loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
+
+            # abox_ec_created loss
+            loss_abox_ec_created = model.forward_abox_ec_created(next(abox_ec_created_dataloader).to(device).long())
+            
+            # tbox_name loss
+            tbox_name_batch = next(tbox_name_dataloader).to(device).long()
+            loss_tbox_name = model.forward_name(tbox_name_batch, anon_e_emb)
+            
+            # tbox_description loss
+            loss_tbox_desc = []
+            for axiom in next(tbox_desc_dataloader):
+                fs = model.forward(axiom, anon_e_emb)
+                loss_tbox_desc.append(model.get_cc_loss(fs))
+            loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
+            
+            loss = (loss_ggi * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
+            # if torch.isnan(loss):
+            #     pdb.set_trace()
+            # if (step + 1) % (cfg.valid_interval // 10) == 0:
+            #     print(round(loss_ggi.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
+            
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            # loss.backward()
+            # optimizer.step()
+            losses.append(loss.item())
         
         if (step + 1) % cfg.valid_interval == 0:
             avg_loss = round(sum(losses)/len(losses), 4)
