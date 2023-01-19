@@ -108,13 +108,7 @@ def get_all_concepts_and_relations(axiom, all_concepts, all_relations):
         raise ValueError
 
 def extract_nodes(cfg, filename):
-    outliers = ['ObjectOneOf', 
-                'ObjectHasSelf', 
-                'ObjectHasValue', 
-                'ObjectMinCardinality', 
-                'ObjectExactCardinality',
-                'Data',
-                ]
+    outliers = ['ObjectOneOf', 'ObjectHasSelf', 'ObjectHasValue', 'ObjectMinCardinality', 'ObjectExactCardinality']
     tbox_name_str = []
     tbox_name_list = []
     tbox_desc = []
@@ -148,35 +142,17 @@ def extract_nodes(cfg, filename):
     assert len(tbox_name_list) == len(tbox_name_str)
     return pd.DataFrame(tbox_name_list, columns=['h', 'r', 't']), tbox_desc, all_concepts, all_relations
 
-def read_abox_ee(cfg):
+def read_tbox_test(cfg, filename):
     ret = []
-    with open(cfg.data_root + 'MGI_Geno_DiseaseDO.rpt') as f:
+    with open(cfg.data_root + filename) as f:
         for line in f:
-            line = line.strip('\n').split('\t')
-            allele_id = line[2].replace(':', '_')
-            omim_id = line[-1].replace(':', '_')
-            ret.append([allele_id, 'interactWith', omim_id])
-    ret = pd.DataFrame(ret, columns=['h', 'r', 't']).drop_duplicates()
-    return ret
-
-def read_abox_ec(cfg):
-    pheno_prefix = 'http://purl.obolibrary.org/obo/'
-    ret = []
-    with open(cfg.data_root + 'MGI_Geno_DiseaseDO.rpt') as f:
-        for line in f:
-            line = line.strip('\n').split('\t')
-            allele_id = line[2].replace(':', '_')
-            pheno_id = line[4].replace(':', '_')
-            ret.append([allele_id, 'hasPhenotype', '<' + pheno_prefix + pheno_id + '>'])
-    with open(cfg.data_root + 'phenotype.hpoa') as f:
-        for line in f:
-            if line[0] != '#':
-                line = line.strip('\n').split('\t')
-                omim_id = line[0].replace(':', '_')
-                pheno_id = line[3].replace(':', '_')
-                ret.append([omim_id, 'hasPhenotype', '<' + pheno_prefix + pheno_id + '>'])
-    ret = pd.DataFrame(ret, columns=['h', 'r', 't']).drop_duplicates()
-    return ret
+            line = line.strip('\n')
+            ret.append(line)
+    all_concepts = set()
+    all_relations = set()
+    for axiom in ret:
+        get_all_concepts_and_relations(axiom, all_concepts, all_relations)
+    return ret, all_concepts
 
 def get_abox_ec_created(all_concepts, k):
     ret = []
@@ -187,25 +163,79 @@ def get_abox_ec_created(all_concepts, k):
             counter += 1
     return pd.DataFrame(ret, columns=['h', 't'])
 
-def get_data(cfg):
-    tbox_name_train, tbox_desc_train, all_concepts, tbox_relations_train = extract_nodes(cfg, filename='pheno.txt')
-    abox_ec = read_abox_ec(cfg)
-    abox_ee = read_abox_ee(cfg)
+def read_file(cfg):
+    outliers = ['ObjectOneOf', 'ObjectHasSelf', 'ObjectHasValue', 'ObjectMinCardinality', 'ObjectExactCardinality']
+    tbox_name_str = []
+    tbox_name_list = []
+    tbox_desc = []
+    abox_ec = []
+    abox_ee_train = []
+    with open(cfg.data_root + 'data-train/output.txt') as f:
+        for line in f:
+            line = line.strip('\n')
+            if 'interacts' in line:
+                e_1, e_2 = re.match(r'ObjectIntersectionOf\(<http://(.*)> ObjectComplementOf\(ObjectSomeValuesFrom\(<http://interacts> <http://(.*)>\)\)\)', line, re.M|re.I).groups()
+                abox_ee_train.append([e_1, 'interactWith', e_2])
+            elif 'hasFunction' in line:
+                e, c = re.match(r'ObjectIntersectionOf\(<http://(.*)> ObjectComplementOf\(ObjectSomeValuesFrom\(<http://hasFunction> (.*)\)\)\)', line, re.M|re.I).groups()
+                abox_ec.append([e, 'hasPhenotype', c])
+            else:
+                flag = 0
+                for outlier in outliers:
+                    if outlier in line:
+                        flag = 1
+                        break
+                if flag == 0:
+                    name_match = re.match(r'ObjectIntersectionOf\(<(.*)> ObjectComplementOf\(<(.*)>\)\)', line, re.M|re.I)
+                    name_match_thing = re.match(r'ObjectIntersectionOf\(<(.*)> ObjectComplementOf\(owl:Thing\)\)', line, re.M|re.I)
+                    if name_match:
+                        matched = name_match.groups()
+                        tbox_name_list.append([f'<{matched[0]}>', 'subClassOf', f'<{matched[1]}>'])
+                        tbox_name_str.append(line)
+                    elif name_match_thing:
+                        matched = name_match_thing.groups()
+                        tbox_name_list.append([f'<{matched[0]}>','subClassOf', f'owl:Thing'])
+                        tbox_name_str.append(line)
+                    else:
+                        tbox_desc.append(line)
+    abox_ee_train = pd.DataFrame(abox_ee_train, columns=['h', 'r', 't']).drop_duplicates()
+    abox_ec = pd.DataFrame(abox_ec, columns=['h', 'r', 't']).drop_duplicates()
+    all_concepts = set()
+    all_relations = set()
+    for axiom in tbox_name_str:
+        get_all_concepts_and_relations(axiom, all_concepts, all_relations)
+    for axiom in tbox_desc:
+        get_all_concepts_and_relations(axiom, all_concepts, all_relations)
+    assert len(tbox_name_list) == len(tbox_name_str)
+    tbox_name = pd.DataFrame(tbox_name_list, columns=['h', 'r', 't'])
+    
+    abox_ee_valid = []
+    with open(cfg.data_root + 'data-valid/4932.protein.links.v10.5.txt') as f:
+        for line in f:
+            e_1, e_2 = line.strip().split('\t')
+            abox_ee_valid.append([e_1, 'interactWith', e_2])
+    abox_ee_valid = pd.DataFrame(abox_ee_valid, columns=['h', 'r', 't']).drop_duplicates()
 
+    abox_ee_test = []
+    with open(cfg.data_root + 'data-test/4932.protein.links.v10.5.txt') as f:
+        for line in f:
+            e_1, e_2 = line.strip().split('\t')
+            abox_ee_test.append([e_1, 'interactWith', e_2])
+    abox_ee_test = pd.DataFrame(abox_ee_test, columns=['h', 'r', 't']).drop_duplicates()
+    
+    return tbox_name, tbox_desc, all_concepts, all_relations, abox_ec, abox_ee_train, abox_ee_valid, abox_ee_test
+
+def get_data(cfg):
+    tbox_name, tbox_desc, all_concepts, all_relations, abox_ec, abox_ee_train, abox_ee_valid, abox_ee_test = read_file(cfg)
+    
     abox_ec_created = get_abox_ec_created(all_concepts, k=cfg.n_abox_ec_created)
     created_entities = set(abox_ec_created.h.unique())
 
-    all_alleles = list(set(abox_ee.h.unique()))
-    print(f'Alleles: {len(all_alleles)}')
-    all_omims = list(set(abox_ee.t.unique()))
-    print(f'Omims: {len(all_omims)}')
-    all_entities = [*all_alleles, *all_omims]
-    all_relations = tbox_relations_train | set(['subClassOf', 'interactWith', 'hasPhenotype'])
-
-    abox_ec = abox_ec[abox_ec.h.isin(all_entities)]
-    abox_ec = abox_ec[abox_ec.t.isin(all_concepts)]
-    abox_ee = abox_ee[abox_ee.h.isin(all_entities)]
-    abox_ee = abox_ee[abox_ee.t.isin(all_entities)]
+    all_entities = set(abox_ec.h.unique()) | \
+                    set(abox_ee_train.h.unique()) | set(abox_ee_train.t.unique()) | \
+                    set(abox_ee_valid.h.unique()) | set(abox_ee_valid.t.unique()) | \
+                    set(abox_ee_test.h.unique()) | set(abox_ee_test.t.unique()) 
+    all_relations = all_relations | set(['subClassOf', 'interactWith', 'hasPhenotype'])
 
     c_dict = {k: v for v, k in enumerate(all_concepts)}
     e_dict = {k: v for v, k in enumerate(all_entities)}
@@ -214,9 +244,9 @@ def get_data(cfg):
     r_dict = {k: v for v, k in enumerate(all_relations)}
 
     # id mapper
-    tbox_name_train.h = tbox_name_train.h.map(c_dict)
-    tbox_name_train.r = tbox_name_train.r.map(r_dict)
-    tbox_name_train.t = tbox_name_train.t.map(c_dict)
+    tbox_name.h = tbox_name.h.map(c_dict)
+    tbox_name.r = tbox_name.r.map(r_dict)
+    tbox_name.t = tbox_name.t.map(c_dict)
     
     abox_ec.h = abox_ec.h.map(e_dict)
     abox_ec.r = abox_ec.r.map(r_dict)
@@ -225,20 +255,17 @@ def get_data(cfg):
     abox_ec_created.h = abox_ec_created.h.map(e_dict_more)
     abox_ec_created.t = abox_ec_created.t.map(c_dict)
 
-    abox_ee.h = abox_ee.h.map(e_dict)
-    abox_ee.r = abox_ee.r.map(r_dict)
-    abox_ee.t = abox_ee.t.map(e_dict)
-    
-    # abox splitter
-    try:
-        abox_ee_train = load_obj(cfg.data_root + 'abox_ee_train.pkl')
-        abox_ee_test = load_obj(cfg.data_root + 'abox_ee_test.pkl')
-    except:
-        print('New Split!', flush=True)
-        abox_ee_test = abox_ee[abox_ee['h'] > 2000].sample(frac=1)
-        abox_ee_train = pd.concat([abox_ee, abox_ee_test]).drop_duplicates(keep=False)
-        save_obj(abox_ee_train, cfg.data_root + 'abox_ee_train.pkl')
-        save_obj(abox_ee_test, cfg.data_root + 'abox_ee_test.pkl')
+    abox_ee_train.h = abox_ee_train.h.map(e_dict)
+    abox_ee_train.r = abox_ee_train.r.map(r_dict)
+    abox_ee_train.t = abox_ee_train.t.map(e_dict)
+
+    abox_ee_valid.h = abox_ee_valid.h.map(e_dict)
+    abox_ee_valid.r = abox_ee_valid.r.map(r_dict)
+    abox_ee_valid.t = abox_ee_valid.t.map(e_dict)
+
+    abox_ee_test.h = abox_ee_test.h.map(e_dict)
+    abox_ee_test.r = abox_ee_test.r.map(r_dict)
+    abox_ee_test.t = abox_ee_test.t.map(e_dict)
     
     already_ts_dict = {}
     already_hs_dict = {}
@@ -249,17 +276,16 @@ def get_data(cfg):
     for record in already_hs:
         already_hs_dict[(record[0], record[1])] = record[2]
     
-    return tbox_name_train, tbox_desc_train, abox_ec, abox_ec_created, abox_ee_train, abox_ee_test, c_dict, e_dict, e_dict_more, r_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict
+    return tbox_name, tbox_desc, abox_ec, abox_ec_created, abox_ee_train, abox_ee_test, c_dict, e_dict, e_dict_more, r_dict, already_ts_dict, already_hs_dict
 
-class EEDataset(torch.utils.data.Dataset):
-    def __init__(self, cfg, data, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage):
+class GGIDataset(torch.utils.data.Dataset):
+    def __init__(self, cfg, data, e_dict, already_ts_dict, already_hs_dict, stage):
         super().__init__()
         self.stage = stage
         self.cfg = cfg
         self.e_dict = e_dict
-        self.all_alleles = all_alleles
-        self.all_omims = all_omims
         self.data = torch.tensor(data.values)
+        self.all_candidate = torch.arange(len(e_dict)).unsqueeze(dim=-1)
         self.neg_shape = torch.zeros(self.cfg.num_ng//2, 1)
         self.already_ts_dict = already_ts_dict
         self.already_hs_dict = already_hs_dict
@@ -268,11 +294,10 @@ class EEDataset(torch.utils.data.Dataset):
         head, rel, tail = pos
         already_ts = torch.tensor(self.already_ts_dict[(head.item(), rel.item())])
         already_hs = torch.tensor(self.already_hs_dict[(tail.item(), rel.item())])
-        neg_pool_t = torch.ones(len(self.all_alleles) + len(self.all_omims))
+        neg_pool_t = torch.ones(len(self.e_dict))
         neg_pool_t[already_ts] = 0
-        neg_pool_t[:len(self.all_alleles)] = 0
         neg_pool_t = neg_pool_t.nonzero()
-        neg_pool_h = torch.ones(len(self.all_alleles))
+        neg_pool_h = torch.ones(len(self.e_dict))
         neg_pool_h[already_hs] = 0
         neg_pool_h = neg_pool_h.nonzero()
         neg_t = neg_pool_t[torch.randint(len(neg_pool_t), (self.cfg.num_ng//2,))]
@@ -291,9 +316,9 @@ class EEDataset(torch.utils.data.Dataset):
             return torch.cat([pos.unsqueeze(dim=0), replace_tail, replace_head], dim=0)
         elif self.stage == 'test':
             pos = self.data[idx]
-            all_candidate = torch.arange(len(self.all_omims)).unsqueeze(dim=-1) + len(self.all_alleles)
-            X = torch.cat([pos[1].expand_as(all_candidate), pos[1].expand_as(all_candidate), all_candidate], dim=-1)
-            return X, pos
+            replace_tail = torch.cat([pos[0].expand_as(self.all_candidate), pos[1].expand_as(self.all_candidate), self.all_candidate], dim=-1)
+            replace_head = torch.cat([self.all_candidate, pos[1].expand_as(self.all_candidate), pos[2].expand_as(self.all_candidate)], dim=-1)
+            return torch.cat([replace_head, replace_tail], dim=0), pos
         else:
             raise ValueError
 
@@ -557,7 +582,7 @@ class FALCON(torch.nn.Module):
         else:
             raise ValueError
 
-    def forward_ee(self, x, stage='train'):
+    def forward_ggi(self, x, stage='train'):
         e_1_emb = self.e_embedding(x[:, :, 0])
         r_emb = self.r_embedding(x[:, :, 1])
         e_2_emb = self.e_embedding(x[:, :, 2])
@@ -577,41 +602,58 @@ class FALCON(torch.nn.Module):
             return torch.sigmoid(self.fc_0(emb)).flatten()
             # return torch.sigmoid(self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1))).flatten()
 
-def get_ranks(logits, y, already_ts_dict, all_alleles):
-    logits_sorted = torch.argsort(logits.cpu(), dim=-1, descending=True) + len(all_alleles)
-    ranks = ((logits_sorted == y[2]).nonzero()[0][0] + 1).long()
-    key = (y[0].item(), y[1].item())
-    try:
-        already = already_ts_dict[key]
-    except:
-        already = None
+def get_ranks(logits, y, already_ts_dict, already_hs_dict, flag):
+    logits_sorted = torch.argsort(logits.cpu(), dim=-1, descending=True)
+    if flag == 'head':
+        ranks = ((logits_sorted == y[0]).nonzero()[0][0] + 1).long()
+        key = (y[2].item(), y[1].item())
+        try:
+            already = already_hs_dict[key]
+        except:
+            already = None
+    elif flag == 'tail':
+        ranks = ((logits_sorted == y[2]).nonzero()[0][0] + 1).long()
+        key = (y[0].item(), y[1].item())
+        try:
+            already = already_ts_dict[key]
+        except:
+            already = None
     ranking_better = logits_sorted[:ranks - 1]
     if already != None:
         for e in already:
             if (ranking_better == e).sum() == 1:
                 ranks -= 1
-    # ranks = torch.randint(len(logits), (1, )) + 1
     r = ranks.item()
     rr = (1 / ranks).item()
     h1 = (ranks == 1).float().item()
-    h3 = (ranks <= 10).float().item()
-    h10 = (ranks <= 50).float().item()
+    h3 = (ranks <= 3).float().item()
+    h10 = (ranks <= 10).float().item()
     return r, rr, h1, h3, h10
 
-def ee_evaluate(model, loader, e_dict, device, already_ts_dict, all_alleles):
+def ggi_evaluate(model, loader, e_dict, device, already_ts_dict, already_hs_dict):
     model.eval()
     mr, mrr, mh1, mh3, mh10 = 0, 0, 0, 0, 0
     with torch.no_grad():
         for X, y in loader:
             X = X.to(device)
-            logits = model.forward_ee(X, stage='test')
-            r, rr, h1, h3, h10 = get_ranks(logits, y[0], already_ts_dict, all_alleles)
+            if model.__class__.__name__ == 'FALCON':
+                logits = model.forward_ggi(X, stage='test')
+            elif model.__class__.__name__ == 'KGCModel':
+                logits = model.forward(X).flatten()
+            logits_head, logits_tail = logits[:len(e_dict)], logits[len(e_dict):]
+            r, rr, h1, h3, h10 = get_ranks(logits_head, y[0], already_ts_dict, already_hs_dict, flag='head')
             mr += r
             mrr += rr
             mh1 += h1
             mh3 += h3
             mh10 += h10
-    counter = len(loader)
+            r, rr, h1, h3, h10 = get_ranks(logits_tail, y[0], already_ts_dict, already_hs_dict, flag='tail')
+            mr += r
+            mrr += rr
+            mh1 += h1
+            mh3 += h3
+            mh10 += h10
+    counter = len(e_dict) * 2
     _, mrr, _, mh3, mh10 = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3)
     return mrr, mh3, mh10
 
@@ -620,9 +662,23 @@ def iterator(dataloader):
         for data in dataloader:
             yield data
 
+def compute_metrics(preds):
+    n_pos = n_neg = len(preds) // 2
+    labels = [0] * n_pos + [1] * n_neg
+    
+    mae_pos = round(sum(preds[:n_pos]) / n_pos, 4)
+    auc = round(roc_auc_score(labels, preds), 4)
+    aupr = round(average_precision_score(labels, preds), 4)
+    
+    precision, recall, _ = precision_recall_curve(labels, preds)
+    f1_scores = 2 * recall * precision / (recall + precision + 1e-10)
+    fmax = round(np.max(f1_scores), 4)
+    
+    return mae_pos, auc, aupr, fmax
+
 def parse_args(args=None):
     parser = argparse.ArgumentParser()
-    # Tunable
+    # Tuable
     parser.add_argument('--model', default='FALCON', type=str, help='FALCON, DistMult, TransE, ConvE')
     parser.add_argument('--lr', default=0.0001, type=float)
     parser.add_argument('--wd', default=0, type=float)
@@ -634,22 +690,23 @@ def parse_args(args=None):
     parser.add_argument('--bs_ee', default=64, type=int)
     parser.add_argument('--bs_ec', default=64, type=int)
     parser.add_argument('--bs_tbox_name', default=64, type=int)
-    parser.add_argument('--bs_tbox_desc', default=1, type=int)
+    parser.add_argument('--bs_tbox_desc', default=4, type=int)
     parser.add_argument('--anon_e', default=4, type=int)
-    parser.add_argument('--n_abox_ec_created', default=1000, type=int)
+    parser.add_argument('--n_e', default=1500, type=int)
+    parser.add_argument('--n_abox_ec_created', default=900, type=int)
     parser.add_argument('--n_inconsistent', default=0, type=int)
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz')
     parser.add_argument('--residuum', default='notCorD', type=str)
     parser.add_argument('--max_measure', default='max', type=str)
-    parser.add_argument('--scoring_fct_norm', default=2, type=float)
-    parser.add_argument('--kernel_size', default=3, type=int)
-    parser.add_argument('--convkb_drop_prob', default=0.2, type=float)
-    parser.add_argument('--out_channels', default=8, type=int)
+    parser.add_argument('--scoring_fct_norm', default=2, type=float)  
+    parser.add_argument('--kernel_size', default=3, type=int)           
+    parser.add_argument('--convkb_drop_prob', default=0.2, type=float)  
+    parser.add_argument('--out_channels', default=8, type=int)        
     # Untunable
-    parser.add_argument('--data_root', default='../../data/pheno/', type=str)
+    parser.add_argument('--data_root', default='../../data/el/', type=str)
     parser.add_argument('--max_steps', default=100000, type=int)
     parser.add_argument('--valid_interval', default=1000, type=int)
-    parser.add_argument('--tolerance', default=5, type=int)
+    parser.add_argument('--tolerance', default=10, type=int)
     parser.add_argument('--verbose', default=1, type=int)
     parser.add_argument('--gpu', default=0, type=int)
     return parser.parse_args(args)
@@ -659,27 +716,25 @@ if __name__ == '__main__':
     print('Configurations:', flush=True)
     for arg in vars(cfg):
         print(f'\t{arg}: {getattr(cfg, arg)}', flush=True)
-    tbox_name_train, tbox_desc_train, \
-        abox_ec, abox_ec_created, abox_ee_train, abox_ee_test, \
-        c_dict, e_dict, e_dict_more, r_dict, all_alleles, all_omims, \
-        already_ts_dict, already_hs_dict = get_data(cfg)
+    tbox_name, tbox_desc, abox_ec, abox_ec_created, abox_ee_train, abox_ee_test, \
+        c_dict, e_dict, e_dict_more, r_dict, already_ts_dict, already_hs_dict = get_data(cfg)
     print(f'Concept: {len(c_dict)}\tIndividual: {len(e_dict)}+{cfg.anon_e}+{len(abox_ec_created)}\tRelation: {len(r_dict)}', flush=True)
-    print(f'TBox Name: {len(tbox_name_train)}\tTBox Description: {len(tbox_desc_train)}\t\
+    print(f'TBox Name: {len(tbox_name)}\tTBox Description: {len(tbox_desc)}\t\
         ABox_ec: {len(abox_ec)}\tABox_ee_train:{len(abox_ee_train)}\tABox_ee_test:{len(abox_ee_test)}', flush=True)
     
-    ee_dataset_train = EEDataset(cfg, abox_ee_train, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage='train')
-    ee_dataset_test = EEDataset(cfg, abox_ee_test, e_dict, all_alleles, all_omims, already_ts_dict, already_hs_dict, stage='test')
+    ggi_dataset_train = GGIDataset(cfg, abox_ee_train, e_dict, already_ts_dict, already_hs_dict, stage='train')
+    ggi_dataset_test = GGIDataset(cfg, abox_ee_test, e_dict, already_ts_dict, already_hs_dict, stage='test')
     abox_ec_dataset = AboxECDataset(cfg, abox_ec, e_dict)
     abox_ec_created_dataset = AboxECCreatedDataset(cfg, abox_ec_created, e_dict)
-    tbox_name_dataset = NaiveDataset(torch.tensor(tbox_name_train.values))
-    tbox_desc_dataset = NaiveDataset(tbox_desc_train)
+    tbox_name_dataset = NaiveDataset(torch.tensor(tbox_name.values))
+    tbox_desc_dataset = NaiveDataset(tbox_desc)
     
-    ee_dataloader_train = torch.utils.data.DataLoader(dataset=ee_dataset_train, 
+    ggi_dataloader_train = torch.utils.data.DataLoader(dataset=ggi_dataset_train, 
                                                         batch_size=cfg.bs_ee,
-                                                        # num_workers=2,
+                                                        # num_workers=4,
                                                         shuffle=True,
                                                         drop_last=True)
-    ee_dataloader_test = torch.utils.data.DataLoader(dataset=ee_dataset_test, 
+    ggi_dataloader_test = torch.utils.data.DataLoader(dataset=ggi_dataset_test, 
                                                         batch_size=1,
                                                         # num_workers=4,
                                                         shuffle=False,
@@ -691,7 +746,7 @@ if __name__ == '__main__':
                                                         drop_last=True)
     abox_ec_created_dataloader = torch.utils.data.DataLoader(dataset=abox_ec_created_dataset, 
                                                         batch_size=cfg.bs_ec,
-                                                        num_workers=4,
+                                                        # num_workers=4,
                                                         shuffle=True,
                                                         drop_last=True)
     tbox_name_dataloader = torch.utils.data.DataLoader(dataset=tbox_name_dataset, 
@@ -703,7 +758,7 @@ if __name__ == '__main__':
                                                         shuffle=True,
                                                         drop_last=True)
 
-    ee_dataloader_train = iterator(ee_dataloader_train)
+    ggi_dataloader_train = iterator(ggi_dataloader_train)
     abox_ec_dataloader = iterator(abox_ec_dataloader)
     abox_ec_created_dataloader = iterator(abox_ec_created_dataloader)
     tbox_name_dataloader = iterator(tbox_name_dataloader)
@@ -713,7 +768,6 @@ if __name__ == '__main__':
     model = FALCON(c_dict, e_dict_more, r_dict, cfg, device)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.wd)
-    
     
     weights = [5, 1, 1, 1, 1]
     if cfg.verbose:
@@ -730,8 +784,8 @@ if __name__ == '__main__':
         torch.nn.init.xavier_uniform_(anon_e_emb_2)
         anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
 
-        # ee loss
-        loss_ee = model.forward_ee(next(ee_dataloader_train).to(device).long())
+        # ggi loss
+        loss_ggi = model.forward_ggi(next(ggi_dataloader_train).to(device).long())
         
         # abox_ec loss
         loss_abox_ec = model.forward_abox_ec(next(abox_ec_dataloader).to(device).long(), anon_e_emb)
@@ -750,10 +804,12 @@ if __name__ == '__main__':
             loss_tbox_desc.append(model.get_cc_loss(fs))
         loss_tbox_desc = sum(loss_tbox_desc) / len(loss_tbox_desc)
         
-        loss = (loss_ee * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
-        if (step + 1) % (cfg.valid_interval // 10) == 0:
-            print(round(loss_ee.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
-
+        loss = (loss_ggi * weights[0] + loss_abox_ec * weights[1] + loss_abox_ec_created * weights[2] + loss_tbox_name * weights[3] + loss_tbox_desc * weights[4]) / sum(weights)
+        # if torch.isnan(loss):
+        #     pdb.set_trace()
+        # if (step + 1) % (cfg.valid_interval // 10) == 0:
+        #     print(round(loss_ggi.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
+        
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -763,12 +819,12 @@ if __name__ == '__main__':
             avg_loss = round(sum(losses)/len(losses), 4)
             print(f'Loss: {avg_loss}', flush=True)
             losses = []
-            mrr, mh3, mh10 = ee_evaluate(model, ee_dataloader_test, e_dict, device, already_ts_dict, all_alleles)
-            print(f'MRR: {round(mrr, 3)}, H10: {mh3}, H50: {mh10}', flush=True)
+            mrr, mh3, mh10 = ggi_evaluate(model, ggi_dataloader_test, e_dict, device, already_ts_dict, already_hs_dict)
+            print(f'#GGI# MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}', flush=True)
             results.append([mrr, mh3, mh10])
     results = torch.tensor(results)
     final_results = results[results.transpose(1, 0).max(dim=-1)[1][0]]
     print(results)
     mrr, mh3, mh10 = final_results
-    print(f'Best: #EE# MRR: {round(mrr.item(), 3)}\tH10: {round(mh3.item(), 3)}\tH50: {round(mh10.item(), 3)}', flush=True)
+    print(f'Best: #GGI# MRR: {round(mrr.item(), 3)}\tH3: {round(mh3.item(), 3)}\tH10: {round(mh10.item(), 3)}', flush=True)
 
