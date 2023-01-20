@@ -654,8 +654,8 @@ def ggi_evaluate(model, loader, e_dict, device, already_ts_dict, already_hs_dict
             mh3 += h3
             mh10 += h10
     counter = len(e_dict) * 2
-    _, mrr, _, mh3, mh10 = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3)
-    return mrr, mh3, mh10
+    mr, mrr, mh1, mh3, mh10 = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3)
+    return mr, mh1, mh10
 
 def iterator(dataloader):
     while True:
@@ -689,11 +689,11 @@ def parse_args(args=None):
     parser.add_argument('--bs_kgc', default=64, type=int)
     parser.add_argument('--bs_ee', default=64, type=int)
     parser.add_argument('--bs_ec', default=64, type=int)
-    parser.add_argument('--bs_tbox_name', default=32, type=int)
+    parser.add_argument('--bs_tbox_name', default=64, type=int)
     parser.add_argument('--bs_tbox_desc', default=4, type=int)
     parser.add_argument('--anon_e', default=4, type=int)
     parser.add_argument('--n_e', default=1500, type=int)
-    parser.add_argument('--n_abox_ec_created', default=800, type=int)
+    parser.add_argument('--n_abox_ec_created', default=1000, type=int)
     parser.add_argument('--n_inconsistent', default=0, type=int)
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz')
     parser.add_argument('--residuum', default='notCorD', type=str)
@@ -705,7 +705,7 @@ def parse_args(args=None):
     # Untunable
     parser.add_argument('--data_root', default='../../data/el/', type=str)
     parser.add_argument('--max_steps', default=100000, type=int)
-    parser.add_argument('--valid_interval', default=1000, type=int)
+    parser.add_argument('--valid_interval', default=100, type=int)
     parser.add_argument('--tolerance', default=10, type=int)
     parser.add_argument('--verbose', default=1, type=int)
     parser.add_argument('--gpu', default=0, type=int)
@@ -772,6 +772,7 @@ if __name__ == '__main__':
     weights = [5, 1, 1, 1, 1]
     if cfg.verbose:
         ranger = tqdm.tqdm(range(cfg.max_steps))
+        ggi_dataloader_test = tqdm.tqdm(ggi_dataloader_test)
     else:
         ranger = range(cfg.max_steps)
     losses = []
@@ -825,12 +826,12 @@ if __name__ == '__main__':
             avg_loss = round(sum(losses)/len(losses), 4)
             print(f'Loss: {avg_loss}', flush=True)
             losses = []
-            mrr, mh3, mh10 = ggi_evaluate(model, ggi_dataloader_test, e_dict, device, already_ts_dict, already_hs_dict)
-            print(f'#GGI# MRR: {round(mrr, 3)}, H3: {mh3}, H10: {mh10}', flush=True)
-            results.append([mrr, mh3, mh10])
+            mr, mh1, mh10 = ggi_evaluate(model, ggi_dataloader_test, e_dict, device, already_ts_dict, already_hs_dict)
+            print(f'MR: {round(mr, 3)}, H1: {mh1}, H10: {mh10}', flush=True)
+            results.append([mr, mh1, mh10])
     results = torch.tensor(results)
     final_results = results[results.transpose(1, 0).max(dim=-1)[1][0]]
     print(results)
-    mrr, mh3, mh10 = final_results
-    print(f'Best: #GGI# MRR: {round(mrr.item(), 3)}\tH3: {round(mh3.item(), 3)}\tH10: {round(mh10.item(), 3)}', flush=True)
+    mr, mh1, mh10 = final_results
+    print(f'Best: MR: {round(mr.item(), 3)}\tH1: {round(mh1.item(), 3)}\tH10: {round(mh10.item(), 3)}', flush=True)
 
