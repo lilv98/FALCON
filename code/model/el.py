@@ -618,21 +618,20 @@ def get_ranks(logits, y, already_ts_dict, already_hs_dict, flag):
             already = already_ts_dict[key]
         except:
             already = None
+    h10_raw = (ranks <= 10).float().item()
+    h100_raw = (ranks <= 100).float().item()
     ranking_better = logits_sorted[:ranks - 1]
     if already != None:
         for e in already:
             if (ranking_better == e).sum() == 1:
                 ranks -= 1
-    r = ranks.item()
-    rr = (1 / ranks).item()
-    h1 = (ranks == 1).float().item()
-    h3 = (ranks <= 3).float().item()
-    h10 = (ranks <= 10).float().item()
-    return r, rr, h1, h3, h10
+    h10_filter = (ranks <= 10).float().item()
+    h100_filter = (ranks <= 100).float().item()
+    return h10_raw, h100_raw, h10_filter, h100_filter
 
 def ggi_evaluate(model, loader, e_dict, device, already_ts_dict, already_hs_dict):
     model.eval()
-    mr, mrr, mh1, mh3, mh10 = 0, 0, 0, 0, 0
+    mh10_raw, mh100_raw, mh10_filter, mh100_filter = 0, 0, 0, 0
     with torch.no_grad():
         for X, y in loader:
             X = X.to(device)
@@ -641,40 +640,24 @@ def ggi_evaluate(model, loader, e_dict, device, already_ts_dict, already_hs_dict
             elif model.__class__.__name__ == 'KGCModel':
                 logits = model.forward(X).flatten()
             logits_head, logits_tail = logits[:len(e_dict)], logits[len(e_dict):]
-            r, rr, h1, h3, h10 = get_ranks(logits_head, y[0], already_ts_dict, already_hs_dict, flag='head')
-            mr += r
-            mrr += rr
-            mh1 += h1
-            mh3 += h3
-            mh10 += h10
-            r, rr, h1, h3, h10 = get_ranks(logits_tail, y[0], already_ts_dict, already_hs_dict, flag='tail')
-            mr += r
-            mrr += rr
-            mh1 += h1
-            mh3 += h3
-            mh10 += h10
+            h10_raw, h100_raw, h10_filter, h100_filter = get_ranks(logits_head, y[0], already_ts_dict, already_hs_dict, flag='head')
+            mh10_raw += h10_raw
+            mh100_raw += h100_raw
+            mh10_filter += h10_filter
+            mh100_filter += h100_filter
+            h10_raw, h100_raw, h10_filter, h100_filter = get_ranks(logits_tail, y[0], already_ts_dict, already_hs_dict, flag='tail')
+            mh10_raw += h10_raw
+            mh100_raw += h100_raw
+            mh10_filter += h10_filter
+            mh100_filter += h100_filter
     counter = len(e_dict) * 2
-    mr, mrr, mh1, mh3, mh10 = round(mr/counter, 3), round(mrr/counter, 5), round(mh1/counter, 3), round(mh3/counter, 3), round(mh10/counter, 3)
-    return mr, mh1, mh10
+    mh10_raw, mh100_raw, mh10_filter, mh100_filter = round(mh10_raw/counter, 3), round(mh100_raw/counter, 3), round(mh10_filter/counter, 3), round(mh100_filter/counter, 3)
+    return mh10_raw, mh100_raw, mh10_filter, mh100_filter
 
 def iterator(dataloader):
     while True:
         for data in dataloader:
             yield data
-
-def compute_metrics(preds):
-    n_pos = n_neg = len(preds) // 2
-    labels = [0] * n_pos + [1] * n_neg
-    
-    mae_pos = round(sum(preds[:n_pos]) / n_pos, 4)
-    auc = round(roc_auc_score(labels, preds), 4)
-    aupr = round(average_precision_score(labels, preds), 4)
-    
-    precision, recall, _ = precision_recall_curve(labels, preds)
-    f1_scores = 2 * recall * precision / (recall + precision + 1e-10)
-    fmax = round(np.max(f1_scores), 4)
-    
-    return mae_pos, auc, aupr, fmax
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser()
@@ -693,7 +676,7 @@ def parse_args(args=None):
     parser.add_argument('--bs_tbox_desc', default=4, type=int)
     parser.add_argument('--anon_e', default=4, type=int)
     parser.add_argument('--n_e', default=1500, type=int)
-    parser.add_argument('--n_abox_ec_created', default=1000, type=int)
+    parser.add_argument('--n_abox_ec_created', default=1500, type=int)
     parser.add_argument('--n_inconsistent', default=0, type=int)
     parser.add_argument('--t_norm', default='product', type=str, help='product, minmax, Łukasiewicz')
     parser.add_argument('--residuum', default='notCorD', type=str)
@@ -736,7 +719,7 @@ if __name__ == '__main__':
                                                         drop_last=True)
     ggi_dataloader_test = torch.utils.data.DataLoader(dataset=ggi_dataset_test, 
                                                         batch_size=1,
-                                                        # num_workers=4,
+                                                        num_workers=8,
                                                         shuffle=False,
                                                         drop_last=False)
     abox_ec_dataloader = torch.utils.data.DataLoader(dataset=abox_ec_dataset, 
@@ -814,7 +797,7 @@ if __name__ == '__main__':
             #     pdb.set_trace()
             # if (step + 1) % (cfg.valid_interval // 10) == 0:
             #     print(round(loss_ggi.item(), 4), round(loss_abox_ec.item(), 4), round(loss_abox_ec_created.item(), 4), round(loss_tbox_name.item(), 4), round(loss_tbox_desc.item(), 4), round(loss.item(), 4))
-            
+
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -826,12 +809,11 @@ if __name__ == '__main__':
             avg_loss = round(sum(losses)/len(losses), 4)
             print(f'Loss: {avg_loss}', flush=True)
             losses = []
-            mr, mh1, mh10 = ggi_evaluate(model, ggi_dataloader_test, e_dict, device, already_ts_dict, already_hs_dict)
-            print(f'MR: {round(mr, 3)}, H1: {mh1}, H10: {mh10}', flush=True)
-            results.append([mr, mh1, mh10])
+            mh10_raw, mh100_raw, mh10_filter, mh100_filter = ggi_evaluate(model, ggi_dataloader_test, e_dict, device, already_ts_dict, already_hs_dict)
+            print(f'H10Raw: {mh10_raw}, H100Raw: {mh100_raw}, H10Filter: {mh10_filter}, H100Filter: {mh100_filter}', flush=True)
+            results.append([mh10_raw, mh100_raw, mh10_filter, mh100_filter])
     results = torch.tensor(results)
     final_results = results[results.transpose(1, 0).max(dim=-1)[1][0]]
-    print(results)
-    mr, mh1, mh10 = final_results
-    print(f'Best: MR: {round(mr.item(), 3)}\tH1: {round(mh1.item(), 3)}\tH10: {round(mh10.item(), 3)}', flush=True)
+    mh10_raw, mh100_raw, mh10_filter, mh100_filter = final_results
+    print(f'Best: H10Raw: {round(mh10_raw.item(), 3)}\tH100Raw: {round(mh100_raw.item(), 3)}\tH10Filter: {round(mh10_filter.item(), 3)}\tH100Filter: {round(mh100_filter.item(), 3)}', flush=True)
 
